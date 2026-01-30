@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useTTS } from "@/hooks/useTTS";
 
 interface StudyGuide {
   id: string;
@@ -15,6 +16,8 @@ interface StudyGuide {
   content: string;
   topic?: { id: string; name: string };
   completed: boolean;
+  scrollPosition?: number;
+  lastReadAt?: string;
 }
 
 interface GuidesByTopic {
@@ -37,6 +40,13 @@ function StudyGuidesContent() {
   const [loading, setLoading] = useState(true);
   const [selectingExam, setSelectingExam] = useState(!examId);
   const [availableExams, setAvailableExams] = useState<any[]>([]);
+  
+  // TTS
+  const { speak, pause, resume, stop, isPlaying, isPaused, isSupported, rate, setRate } = useTTS();
+  
+  // Reading position
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [hasRestoredScroll, setHasRestoredScroll] = useState(false);
 
   // Fetch available exams if none selected
   useEffect(() => {
@@ -66,6 +76,60 @@ function StudyGuidesContent() {
     }
   }, [guideId, session]);
 
+  // Restore scroll position when guide loads
+  useEffect(() => {
+    if (currentGuide && currentGuide.scrollPosition && contentRef.current && !hasRestoredScroll) {
+      const scrollTarget = (currentGuide.scrollPosition / 100) * contentRef.current.scrollHeight;
+      contentRef.current.scrollTop = scrollTarget;
+      setHasRestoredScroll(true);
+    }
+  }, [currentGuide, hasRestoredScroll]);
+
+  // Save scroll position periodically
+  useEffect(() => {
+    if (!currentGuide || !contentRef.current) return;
+
+    const saveScrollPosition = () => {
+      if (!contentRef.current || !currentGuide) return;
+      const scrollPct = (contentRef.current.scrollTop / contentRef.current.scrollHeight) * 100;
+      
+      // Only save if scrolled more than 5%
+      if (scrollPct > 5) {
+        fetch("/api/study-guides", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studyGuideId: currentGuide.id,
+            scrollPosition: scrollPct,
+          }),
+        }).catch(console.error);
+      }
+    };
+
+    // Save on scroll (debounced)
+    let timeout: NodeJS.Timeout;
+    const handleScroll = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(saveScrollPosition, 1000);
+    };
+
+    const el = contentRef.current;
+    el.addEventListener("scroll", handleScroll);
+    
+    // Also save when leaving
+    return () => {
+      el.removeEventListener("scroll", handleScroll);
+      saveScrollPosition();
+    };
+  }, [currentGuide]);
+
+  // Stop TTS when leaving guide
+  useEffect(() => {
+    return () => {
+      stop();
+    };
+  }, [currentGuide?.id]);
+
   const fetchGuides = async (selectedExamId: string) => {
     setLoading(true);
     try {
@@ -81,6 +145,7 @@ function StudyGuidesContent() {
 
   const fetchGuide = async (id: string) => {
     setLoading(true);
+    setHasRestoredScroll(false);
     try {
       const res = await fetch(`/api/study-guides?id=${id}`);
       const data = await res.json();
@@ -103,13 +168,33 @@ function StudyGuidesContent() {
         setCurrentGuide({ ...currentGuide, completed });
       }
 
-      // Refresh guides list
       if (examId) {
         fetchGuides(examId);
       }
     } catch (error) {
       console.error("Error marking complete:", error);
     }
+  };
+
+  const handleTTS = () => {
+    if (!currentGuide) return;
+    
+    if (isPlaying && !isPaused) {
+      pause();
+    } else if (isPaused) {
+      resume();
+    } else {
+      // Strip HTML and speak plain text
+      const plainText = currentGuide.content
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      speak(plainText);
+    }
+  };
+
+  const handleStopTTS = () => {
+    stop();
   };
 
   if (loading) {
@@ -160,22 +245,67 @@ function StudyGuidesContent() {
     );
   }
 
-  // Single guide view
+  // Single guide view with TTS
   if (currentGuide) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
+      <div className="max-w-3xl mx-auto space-y-4">
+        {/* Header with back button */}
+        <div className="flex items-center justify-between">
           <Button
             variant="ghost"
             onClick={() => {
+              stop();
               setCurrentGuide(null);
               window.history.pushState({}, "", `?examId=${examId}`);
             }}
           >
             ← Back to Guides
           </Button>
+          
+          {currentGuide.scrollPosition && currentGuide.scrollPosition > 10 && (
+            <Badge variant="outline" className="text-xs">
+              📖 {Math.round(currentGuide.scrollPosition)}% read
+            </Badge>
+          )}
         </div>
 
+        {/* TTS Controls */}
+        {isSupported && (
+          <Card className="bg-blue-50 border-blue-200">
+            <CardContent className="py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button 
+                  size="sm" 
+                  variant={isPlaying ? "default" : "outline"}
+                  onClick={handleTTS}
+                >
+                  {isPlaying && !isPaused ? "⏸️ Pause" : isPaused ? "▶️ Resume" : "🔊 Read Aloud"}
+                </Button>
+                {isPlaying && (
+                  <Button size="sm" variant="outline" onClick={handleStopTTS}>
+                    ⏹️ Stop
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-500">Speed:</span>
+                <select 
+                  value={rate} 
+                  onChange={(e) => setRate(parseFloat(e.target.value))}
+                  className="border rounded px-2 py-1 text-sm"
+                >
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
+                </select>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Content */}
         <Card>
           <CardHeader>
             {currentGuide.topic && (
@@ -187,7 +317,8 @@ function StudyGuidesContent() {
           </CardHeader>
           <CardContent>
             <div
-              className="prose prose-blue max-w-none"
+              ref={contentRef}
+              className="prose prose-blue max-w-none max-h-[60vh] overflow-y-auto pr-4"
               dangerouslySetInnerHTML={{ __html: formatMarkdown(currentGuide.content) }}
             />
 
@@ -290,7 +421,7 @@ function StudyGuidesContent() {
   );
 }
 
-// Simple markdown formatter (basic)
+// Simple markdown formatter
 function formatMarkdown(content: string): string {
   let html = content
     .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold mt-6 mb-2">$1</h3>')
@@ -301,7 +432,6 @@ function formatMarkdown(content: string): string {
     .replace(/^- (.*$)/gm, '<li class="ml-4">$1</li>')
     .replace(/\n\n/g, '</p><p class="my-4">');
   
-  // Wrap consecutive li elements in ul
   html = html.replace(/(<li[^>]*>.*?<\/li>\n?)+/g, '<ul class="list-disc my-4">$&</ul>');
   
   return html;

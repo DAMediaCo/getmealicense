@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
           topic: { select: { id: true, name: true } },
           progress: {
             where: { userId: user.id },
-            select: { completed: true, completedAt: true },
+            select: { completed: true, completedAt: true, scrollPosition: true, lastReadAt: true },
           },
         },
       });
@@ -33,10 +33,13 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Guide not found" }, { status: 404 });
       }
 
+      const progress = guide.progress[0];
       return NextResponse.json({
         guide: {
           ...guide,
-          completed: guide.progress[0]?.completed || false,
+          completed: progress?.completed || false,
+          scrollPosition: progress?.scrollPosition || 0,
+          lastReadAt: progress?.lastReadAt || null,
         },
       });
     }
@@ -95,7 +98,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/study-guides - Mark guide as complete/incomplete
+// POST /api/study-guides - Mark guide as complete/incomplete or update reading position
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -105,10 +108,24 @@ export async function POST(req: NextRequest) {
 
     const user = session.user as any;
     const body = await req.json();
-    const { studyGuideId, completed } = body;
+    const { studyGuideId, completed, scrollPosition } = body;
 
     if (!studyGuideId) {
       return NextResponse.json({ error: "studyGuideId is required" }, { status: 400 });
+    }
+
+    // Build update data
+    const updateData: any = {
+      lastReadAt: new Date(),
+    };
+    
+    if (completed !== undefined) {
+      updateData.completed = completed;
+      updateData.completedAt = completed ? new Date() : null;
+    }
+    
+    if (scrollPosition !== undefined) {
+      updateData.scrollPosition = scrollPosition;
     }
 
     const progress = await prisma.studyGuideProgress.upsert({
@@ -118,15 +135,14 @@ export async function POST(req: NextRequest) {
           studyGuideId,
         },
       },
-      update: {
-        completed: completed ?? true,
-        completedAt: completed ? new Date() : null,
-      },
+      update: updateData,
       create: {
         userId: user.id,
         studyGuideId,
-        completed: completed ?? true,
+        completed: completed ?? false,
         completedAt: completed ? new Date() : null,
+        scrollPosition: scrollPosition ?? 0,
+        lastReadAt: new Date(),
       },
     });
 

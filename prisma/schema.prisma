@@ -195,13 +195,15 @@ model StudyGuide {
 }
 
 model StudyGuideProgress {
-  id           String   @id @default(cuid())
-  userId       String
-  studyGuideId String
-  completed    Boolean  @default(false)
-  completedAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  userId         String
+  studyGuideId   String
+  completed      Boolean  @default(false)
+  completedAt    DateTime?
+  scrollPosition Float?   // Percentage scrolled (0-100)
+  lastReadAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   
   // Relations
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
