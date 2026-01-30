@@ -2,17 +2,43 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+
+interface ExamProgress {
+  examId: string;
+  examCode: string;
+  examName: string;
+  progress: number;
+  readiness: "on-track" | "needs-attention" | "struggling" | "not-started";
+  questionsCorrect: number;
+  totalQuestions: number;
+  masteredFlashcards: number;
+  totalFlashcards: number;
+  recentAccuracy: number;
+  lastActivity: string;
+}
+
+interface RecentActivity {
+  type: string;
+  examCode: string;
+  score: number | null;
+  questionsAnswered: number;
+  date: string;
+}
 
 export default function StudentDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const user = session?.user as any;
+  
+  const [exams, setExams] = useState<ExamProgress[]>([]);
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Redirect managers to their dashboard
   useEffect(() => {
@@ -21,35 +47,22 @@ export default function StudentDashboard() {
     }
   }, [status, user?.role, router]);
 
-  // Mock data - will be replaced with real API calls
-  const assignedExams = [
-    {
-      id: "1",
-      code: "FL-2-15",
-      name: "Florida 2-15 (Life, Health, Annuities)",
-      progress: 45,
-      readiness: "on-track",
-      questionsAnswered: 68,
-      totalQuestions: 151,
-      lastActivity: "2 hours ago",
-    },
-    {
-      id: "2", 
-      code: "FL-2-40",
-      name: "Florida 2-40 (Health Only)",
-      progress: 12,
-      readiness: "needs-attention",
-      questionsAnswered: 8,
-      totalQuestions: 75,
-      lastActivity: "1 day ago",
-    },
-  ];
-
-  const recentActivity = [
-    { type: "quiz", exam: "FL-2-15", score: "85%", date: "2 hours ago" },
-    { type: "flashcard", exam: "FL-2-15", cards: 25, date: "Yesterday" },
-    { type: "study-guide", exam: "FL-2-15", topic: "Life Insurance Basics", date: "Yesterday" },
-  ];
+  // Fetch progress data
+  useEffect(() => {
+    if (status === "authenticated" && user?.role === "STUDENT") {
+      fetch("/api/student/progress")
+        .then(res => res.json())
+        .then(data => {
+          setExams(data.exams || []);
+          setRecentActivity(data.recentActivity || []);
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error("Error fetching progress:", err);
+          setLoading(false);
+        });
+    }
+  }, [status, user?.role]);
 
   const getReadinessBadge = (readiness: string) => {
     switch (readiness) {
@@ -63,6 +76,28 @@ export default function StudentDashboard() {
         return <Badge className="bg-gray-100 text-gray-800">Not Started</Badge>;
     }
   };
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffHours < 1) return "Just now";
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString();
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -88,7 +123,7 @@ export default function StudentDashboard() {
             </CardContent>
           </Link>
         </Card>
-        
+
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
           <Link href="/dashboard/flashcards">
             <CardHeader className="pb-2">
@@ -99,7 +134,7 @@ export default function StudentDashboard() {
             </CardContent>
           </Link>
         </Card>
-        
+
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
           <Link href="/dashboard/exam">
             <CardHeader className="pb-2">
@@ -115,80 +150,88 @@ export default function StudentDashboard() {
       {/* Assigned Exams */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Your Assigned Exams</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {assignedExams.map((exam) => (
-            <Card key={exam.id}>
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">{exam.name}</CardTitle>
-                    <CardDescription>{exam.code}</CardDescription>
+        {exams.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-gray-500">
+              No exams assigned yet. Contact your manager to get started.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {exams.map((exam) => (
+              <Card key={exam.examId}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-semibold text-lg">{exam.examName}</h3>
+                      <p className="text-sm text-gray-500">{exam.examCode}</p>
+                    </div>
+                    {getReadinessBadge(exam.readiness)}
                   </div>
-                  {getReadinessBadge(exam.readiness)}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Progress</span>
-                    <span>{exam.progress}%</span>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>Progress</span>
+                        <span>{exam.progress}%</span>
+                      </div>
+                      <Progress value={exam.progress} className="h-2" />
+                    </div>
+                    
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>{exam.questionsCorrect} / {exam.totalQuestions} questions</span>
+                      <span>Last active: {formatTimeAgo(exam.lastActivity)}</span>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/dashboard/quiz?examId=${exam.examId}`}>
+                          Continue Studying
+                        </Link>
+                      </Button>
+                      <Button asChild variant="default" size="sm">
+                        <Link href={`/dashboard/exam?examId=${exam.examId}`}>
+                          Take Exam
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
-                  <Progress value={exam.progress} className="h-2" />
-                </div>
-                
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>{exam.questionsAnswered} / {exam.totalQuestions} questions</span>
-                  <span>Last active: {exam.lastActivity}</span>
-                </div>
-                
-                <div className="flex space-x-2">
-                  <Button asChild size="sm" className="flex-1">
-                    <Link href={`/dashboard/quiz?exam=${exam.id}`}>
-                      Continue Studying
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`/dashboard/exam?exam=${exam.id}`}>
-                      Take Exam
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Activity */}
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
-        <Card>
-          <CardContent className="p-0">
-            <div className="divide-y">
+      {recentActivity.length > 0 && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
+          <Card>
+            <CardContent className="divide-y">
               {recentActivity.map((activity, idx) => (
-                <div key={idx} className="p-4 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
+                <div key={idx} className="py-4 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
                     <span className="text-2xl">
-                      {activity.type === "quiz" && "📝"}
-                      {activity.type === "flashcard" && "🗂️"}
-                      {activity.type === "study-guide" && "📖"}
+                      {activity.type === "exam" ? "⏱️" : "📝"}
                     </span>
                     <div>
                       <p className="font-medium">
-                        {activity.type === "quiz" && `Practice Quiz - ${activity.score}`}
-                        {activity.type === "flashcard" && `Reviewed ${activity.cards} flashcards`}
-                        {activity.type === "study-guide" && activity.topic}
+                        {activity.type === "exam" ? "Timed Exam" : "Practice Quiz"}
+                        {activity.score !== null && ` - ${activity.score}%`}
                       </p>
-                      <p className="text-sm text-gray-500">{activity.exam}</p>
+                      <p className="text-sm text-gray-500">{activity.examCode}</p>
                     </div>
                   </div>
-                  <span className="text-sm text-gray-500">{activity.date}</span>
+                  <span className="text-sm text-gray-500">
+                    {formatTimeAgo(activity.date)}
+                  </span>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
