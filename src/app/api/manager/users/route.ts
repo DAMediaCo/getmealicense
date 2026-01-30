@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendInviteEmail } from "@/lib/email";
 import crypto from "crypto";
 
 // GET /api/manager/users - List all users (for managers)
@@ -177,9 +178,17 @@ export async function POST(req: NextRequest) {
     // Generate invite URL
     const inviteUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/invite/${inviteToken}`;
 
-    // TODO: Send email via Resend
-    // For now, just return the invite URL
-    console.log(`Invite URL for ${email}: ${inviteUrl}`);
+    // Send invite email
+    const emailResult = await sendInviteEmail({
+      to: email,
+      name,
+      inviteUrl,
+      managerName: manager.name || undefined,
+    });
+
+    if (!emailResult.success) {
+      console.error(`Failed to send invite email to ${email}:`, emailResult.error);
+    }
 
     return NextResponse.json({
       success: true,
@@ -265,6 +274,14 @@ export async function PATCH(req: NextRequest) {
 
         const inviteUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/invite/${newToken}`;
         
+        // Send the email
+        await sendInviteEmail({
+          to: targetUser.email,
+          name: targetUser.name || "there",
+          inviteUrl,
+          managerName: manager.name || undefined,
+        });
+
         return NextResponse.json({
           success: true,
           inviteUrl,
