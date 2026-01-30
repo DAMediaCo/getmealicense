@@ -84,7 +84,9 @@ export default function ManagerUsersPage() {
         return;
       }
 
-      setInviteUrl(data.inviteUrl);
+      // Show success message (email was sent)
+      setFormError(null);
+      setInviteUrl(`Invite sent to ${newUserEmail}!`);
       setNewUserName("");
       setNewUserEmail("");
       setSelectedExamIds([]);
@@ -104,8 +106,8 @@ export default function ManagerUsersPage() {
       });
 
       const data = await res.json();
-      if (action === "resend-invite" && data.inviteUrl) {
-        setInviteUrl(data.inviteUrl);
+      if (action === "resend-invite" && data.success) {
+        setInviteUrl("Invite resent successfully!");
         setShowAddUser(true);
       }
 
@@ -232,8 +234,7 @@ export default function ManagerUsersPage() {
             {formError && <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm">{formError}</div>}
             {inviteUrl && (
               <div className="bg-green-50 text-green-700 p-3 rounded-md text-sm">
-                <p className="font-medium mb-2">Invite created!</p>
-                <code className="bg-green-100 p-2 rounded block break-all text-xs">{inviteUrl}</code>
+                <p className="font-medium">✅ {inviteUrl}</p>
               </div>
             )}
             <div>

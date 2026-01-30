@@ -94,8 +94,8 @@ export default function ManagerDashboard() {
         return;
       }
 
-      // Show invite URL
-      setInviteUrl(data.inviteUrl);
+      // Show success message
+      setInviteUrl(`Invite sent to ${newUserEmail}!`);
       
       // Reset form
       setNewUserName("");
@@ -120,8 +120,8 @@ export default function ManagerDashboard() {
 
       const data = await res.json();
 
-      if (action === "resend-invite" && data.inviteUrl) {
-        setInviteUrl(data.inviteUrl);
+      if (action === "resend-invite" && data.success) {
+        setInviteUrl("Invite resent successfully!");
       }
 
       refreshUsers();
@@ -295,10 +295,7 @@ export default function ManagerDashboard() {
             )}
             {inviteUrl && (
               <div className="bg-green-50 text-green-700 p-3 rounded-md text-sm">
-                <p className="font-medium mb-2">Invite created! Share this link:</p>
-                <code className="bg-green-100 p-2 rounded block break-all">
-                  {inviteUrl}
-                </code>
+                <p className="font-medium">✅ {inviteUrl}</p>
               </div>
             )}
             <div>
