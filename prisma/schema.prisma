@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER & AUTH ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  role          Role      @default(STUDENT)
+  status        UserStatus @default(PENDING)
+  inviteToken   String?   @unique
+  inviteExpiry  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+  createdBy     String?   // Manager who created this user
+  
+  // Relations
+  examAssignments   UserExamAssignment[]
+  quizSessions      QuizSession[]
+  questionResponses QuestionResponse[]
+  flashcardProgress FlashcardProgress[]
+  studyGuideProgress StudyGuideProgress[]
+  resumeStates      UserResumeState[]
+}
+
+enum Role {
+  STUDENT
+  MANAGER
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING    // Invited but not activated
+  ACTIVE     // Can log in
+  DISABLED   // Account disabled by manager
+}
+
+// ==================== EXAMS & CONTENT ====================
+
+model Exam {
+  id           String   @id @default(cuid())
+  code         String   @unique  // e.g., "FL-2-15", "FL-2-40", "AZ-LH"
+  name         String   // e.g., "Florida 2-15 (Life, Health, Annuities)"
+  state        String   // FL, AZ, etc.
+  description  String?
+  passingScore Int      @default(70)
+  timeLimit    Int?     // Minutes for timed exam mode
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  topics            Topic[]
+  questions         Question[]
+  flashcards        Flashcard[]
+  studyGuides       StudyGuide[]
+  userAssignments   UserExamAssignment[]
+  quizSessions      QuizSession[]
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  examId    String
+  name      String
+  weight    Float    @default(1.0)  // Importance weight for readiness score
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  exam       Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  subtopics  Subtopic[]
+  questions  Question[]
+  flashcards Flashcard[]
+  studyGuides StudyGuide[]
+}
+
+model Subtopic {
+  id        String   @id @default(cuid())
+  topicId   String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  questions  Question[]
+  flashcards Flashcard[]
+}
+
+// ==================== QUESTIONS ====================
+
+model Question {
+  id           String     @id @default(cuid())
+  examId       String
+  topicId      String?
+  subtopicId   String?
+  questionText String
+  explanation  String?    // Explanation for correct answer
+  difficulty   Difficulty @default(MEDIUM)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  
+  // Relations
+  exam           Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  topic          Topic?          @relation(fields: [topicId], references: [id])
+  subtopic       Subtopic?       @relation(fields: [subtopicId], references: [id])
+  answerOptions  AnswerOption[]
+  responses      QuestionResponse[]
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model AnswerOption {
+  id         String   @id @default(cuid())
+  questionId String
+  optionText String
+  isCorrect  Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  
+  // Relations
+  question  Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  responses QuestionResponse[]
+}
+
+// ==================== FLASHCARDS ====================
+
+model Flashcard {
+  id         String   @id @default(cuid())
+  examId     String
+  topicId    String?
+  subtopicId String?
+  frontText  String   // Term or question
+  backText   String   // Definition or answer
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // Relations
+  exam     Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  topic    Topic?    @relation(fields: [topicId], references: [id])
+  subtopic Subtopic? @relation(fields: [subtopicId], references: [id])
+  progress FlashcardProgress[]
+}
+
+model FlashcardProgress {
+  id           String   @id @default(cuid())
+  userId       String
+  flashcardId  String
+  masteryLevel Int      @default(0)  // 0-5 spaced repetition
+  nextReview   DateTime @default(now())
+  reviewCount  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flashcard Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, flashcardId])
+}
+
+// ==================== STUDY GUIDES ====================
+
+model StudyGuide {
+  id        String   @id @default(cuid())
+  examId    String
+  topicId   String?
+  title     String
+  content   String   // Markdown content
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  exam     Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  topic    Topic?  @relation(fields: [topicId], references: [id])
+  progress StudyGuideProgress[]
+}
+
+model StudyGuideProgress {
+  id           String   @id @default(cuid())
+  userId       String
+  studyGuideId String
+  completed    Boolean  @default(false)
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studyGuide StudyGuide @relation(fields: [studyGuideId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, studyGuideId])
+}
+
+// ==================== QUIZ & EXAM SESSIONS ====================
+
+model UserExamAssignment {
+  id         String   @id @default(cuid())
+  userId     String
+  examId     String
+  assignedBy String?  // Manager who assigned
+  assignedAt DateTime @default(now())
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, examId])
+}
+
+model QuizSession {
+  id            String        @id @default(cuid())
+  userId        String
+  examId        String
+  type          SessionType   @default(PRACTICE)
+  status        SessionStatus @default(IN_PROGRESS)
+  score         Float?        // Percentage
+  totalQuestions Int          @default(0)
+  correctAnswers Int          @default(0)
+  timeRemaining Int?          // Seconds remaining (for timed exams)
+  startedAt     DateTime      @default(now())
+  completedAt   DateTime?
+  pausedAt      DateTime?
+  
+  // Relations
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam      Exam               @relation(fields: [examId], references: [id], onDelete: Cascade)
+  responses QuestionResponse[]
+}
+
+enum SessionType {
+  PRACTICE   // Untimed practice quiz
+  TIMED_EXAM // Full timed exam mode
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  ABANDONED
+}
+
+model QuestionResponse {
+  id               String   @id @default(cuid())
+  userId           String
+  quizSessionId    String?
+  questionId       String
+  selectedOptionId String?
+  isCorrect        Boolean?
+  timeSpent        Int?     // Seconds spent on this question
+  answeredAt       DateTime @default(now())
+  
+  // Relations
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizSession    QuizSession?  @relation(fields: [quizSessionId], references: [id], onDelete: Cascade)
+  question       Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption AnswerOption? @relation(fields: [selectedOptionId], references: [id])
+}
+
+// ==================== RESUME STATE ====================
+
+model UserResumeState {
+  id           String       @id @default(cuid())
+  userId       String
+  examId       String
+  activityType ActivityType
+  referenceId  String       // ID of the quiz session, flashcard, or study guide
+  lastPosition Json?        // Additional position data (e.g., question index)
+  updatedAt    DateTime     @updatedAt
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, examId, activityType])
+}
+
+enum ActivityType {
+  QUIZ
+  FLASHCARD
+  STUDY_GUIDE
+}
