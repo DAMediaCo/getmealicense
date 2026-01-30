@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export default async function Home() {
-  const session = await auth();
+  const session = await getServerSession(authOptions);
   
   if (session) {
-    // Logged in users go to dashboard
     redirect("/dashboard");
   } else {
-    // Not logged in - redirect to login
     redirect("/login");
   }
 }
