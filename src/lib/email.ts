@@ -2,7 +2,8 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_EMAIL = "GetMeALicense <noreply@getmealicense.com>";
+// Use Resend's test domain until getmealicense.com is verified
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "GetMeALicense <onboarding@resend.dev>";
 
 export async function sendInviteEmail({
   to,
