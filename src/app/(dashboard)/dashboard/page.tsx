@@ -1,6 +1,8 @@
 "use client";
 
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +10,16 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 
 export default function StudentDashboard() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const user = session?.user as any;
+
+  // Redirect managers to their dashboard
+  useEffect(() => {
+    if (status === "authenticated" && (user?.role === "MANAGER" || user?.role === "ADMIN")) {
+      router.replace("/manager");
+    }
+  }, [status, user?.role, router]);
 
   // Mock data - will be replaced with real API calls
   const assignedExams = [

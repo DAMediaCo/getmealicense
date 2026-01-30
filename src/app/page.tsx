@@ -6,7 +6,13 @@ export default async function Home() {
   const session = await getServerSession(authOptions);
   
   if (session) {
-    redirect("/dashboard");
+    const user = session.user as any;
+    // Managers go to manager dashboard, students go to student dashboard
+    if (user?.role === "MANAGER" || user?.role === "ADMIN") {
+      redirect("/manager");
+    } else {
+      redirect("/dashboard");
+    }
   } else {
     redirect("/login");
   }
