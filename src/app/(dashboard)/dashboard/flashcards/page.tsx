@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
+import { useSession } from "next-auth/react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -11,112 +12,88 @@ interface Flashcard {
   id: string;
   frontText: string;
   backText: string;
-  topicName?: string;
-  masteryLevel: number; // 0-5
+  topic?: { id: string; name: string };
+  progress?: {
+    masteryLevel: number;
+    reviewCount: number;
+  } | null;
 }
 
-// Mock flashcards - will be replaced with API
-const mockFlashcards: Flashcard[] = [
-  {
-    id: "1",
-    frontText: "What is a beneficiary?",
-    backText: "The person or entity designated to receive the death benefit or policy proceeds when the insured dies.",
-    topicName: "Life Insurance Basics",
-    masteryLevel: 0,
-  },
-  {
-    id: "2",
-    frontText: "What is an insurance premium?",
-    backText: "The amount of money paid by the policyholder to the insurance company in exchange for coverage, typically paid monthly, quarterly, or annually.",
-    topicName: "General Concepts",
-    masteryLevel: 0,
-  },
-  {
-    id: "3",
-    frontText: "What is underwriting?",
-    backText: "The process by which an insurer evaluates the risk of insuring a potential policyholder and determines coverage eligibility and premium rates.",
-    topicName: "General Concepts",
-    masteryLevel: 0,
-  },
-  {
-    id: "4",
-    frontText: "What is a deductible?",
-    backText: "The amount the policyholder must pay out-of-pocket before the insurance company pays its portion of a covered claim.",
-    topicName: "Health Insurance",
-    masteryLevel: 0,
-  },
-  {
-    id: "5",
-    frontText: "What is a grace period?",
-    backText: "A period of time (usually 30-31 days) after the premium due date during which the policy remains in force and the premium can still be paid without penalty.",
-    topicName: "Policy Provisions",
-    masteryLevel: 0,
-  },
-  {
-    id: "6",
-    frontText: "What is a rider?",
-    backText: "An addition or amendment to an insurance policy that modifies the coverage by adding or excluding certain conditions or increasing/decreasing benefits.",
-    topicName: "Policy Provisions",
-    masteryLevel: 0,
-  },
-  {
-    id: "7",
-    frontText: "What does 'insurable interest' mean?",
-    backText: "A financial or emotional stake in the continued life, health, or safety of the insured. Required at the time of application to prevent wagering on lives.",
-    topicName: "Legal Concepts",
-    masteryLevel: 0,
-  },
-  {
-    id: "8",
-    frontText: "What is the contestability period?",
-    backText: "A period (typically 2 years) during which the insurer can investigate and deny claims based on misrepresentation in the application.",
-    topicName: "Policy Provisions",
-    masteryLevel: 0,
-  },
-];
-
-type FlashcardState = "idle" | "studying" | "complete";
-
-export default function FlashcardsPage() {
+function FlashcardsContent() {
   const searchParams = useSearchParams();
-  const examId = searchParams.get("exam");
+  const examId = searchParams.get("examId");
+  const { data: session } = useSession();
   
-  const [state, setState] = useState<FlashcardState>("idle");
-  const [cards, setCards] = useState<Flashcard[]>([]);
+  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [stats, setStats] = useState({ known: 0, learning: 0, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [selectingExam, setSelectingExam] = useState(!examId);
+  const [availableExams, setAvailableExams] = useState<any[]>([]);
+  const [stats, setStats] = useState({ reviewed: 0, mastered: 0 });
 
-  const currentCard = cards[currentIndex];
-  const progress = cards.length > 0 ? ((currentIndex) / cards.length) * 100 : 0;
+  // Fetch available exams if none selected
+  useEffect(() => {
+    if (!examId && session) {
+      fetch("/api/student/progress")
+        .then(res => res.json())
+        .then(data => {
+          setAvailableExams(data.exams || []);
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
+    }
+  }, [examId, session]);
 
-  const startStudying = () => {
-    // Shuffle cards for variety
-    const shuffled = [...mockFlashcards].sort(() => Math.random() - 0.5);
-    setCards(shuffled);
-    setCurrentIndex(0);
-    setIsFlipped(false);
-    setStats({ known: 0, learning: 0, total: shuffled.length });
-    setState("studying");
+  // Fetch flashcards
+  useEffect(() => {
+    if (examId && session) {
+      setSelectingExam(false);
+      fetchFlashcards(examId);
+    }
+  }, [examId, session]);
+
+  const fetchFlashcards = async (selectedExamId: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/flashcards?examId=${selectedExamId}&mode=review&limit=20`);
+      const data = await res.json();
+      setFlashcards(data.flashcards || []);
+    } catch (error) {
+      console.error("Error fetching flashcards:", error);
+    }
+    setLoading(false);
   };
 
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
   };
 
-  const handleResponse = (knew: boolean) => {
-    setStats(prev => ({
-      ...prev,
-      known: knew ? prev.known + 1 : prev.known,
-      learning: !knew ? prev.learning + 1 : prev.learning,
-    }));
+  const handleRate = async (quality: number) => {
+    const currentCard = flashcards[currentIndex];
+    if (!currentCard) return;
 
-    if (currentIndex < cards.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-      setIsFlipped(false);
-    } else {
-      setState("complete");
+    try {
+      await fetch("/api/flashcards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          flashcardId: currentCard.id,
+          quality,
+        }),
+      });
+
+      setStats(prev => ({
+        reviewed: prev.reviewed + 1,
+        mastered: quality >= 4 ? prev.mastered + 1 : prev.mastered,
+      }));
+    } catch (error) {
+      console.error("Error recording progress:", error);
     }
+
+    // Move to next card
+    setIsFlipped(false);
+    setCurrentIndex(prev => prev + 1);
   };
 
   const getMasteryColor = (level: number) => {
@@ -131,87 +108,99 @@ export default function FlashcardsPage() {
     return "New";
   };
 
-  // Idle state
-  if (state === "idle") {
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Exam selection screen
+  if (selectingExam) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold">Flashcards</h1>
+        <p className="text-gray-500">Select an exam to review flashcards</p>
         
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <p className="text-gray-600">
-              Review key terms and concepts with flashcards. Rate your knowledge
-              to track your progress with spaced repetition.
-            </p>
-            
-            <div className="flex items-center space-x-4 text-sm text-gray-500">
-              <span>🗂️ {mockFlashcards.length} cards</span>
-              <span>🔄 Spaced repetition</span>
-              <span>📊 Track mastery</span>
-            </div>
-            
-            <Button onClick={startStudying} size="lg" className="w-full">
-              Start Reviewing
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Topic breakdown */}
-        <Card>
-          <CardContent className="pt-6">
-            <h3 className="font-semibold mb-4">Cards by Topic</h3>
-            <div className="space-y-2">
-              {Array.from(new Set(mockFlashcards.map(c => c.topicName))).map(topic => (
-                <div key={topic} className="flex justify-between items-center text-sm">
-                  <span>{topic}</span>
+        {availableExams.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-gray-500">
+              No exams assigned yet. Contact your manager.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {availableExams.map((exam) => (
+              <Card 
+                key={exam.examId} 
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => {
+                  window.history.pushState({}, "", `?examId=${exam.examId}`);
+                  fetchFlashcards(exam.examId);
+                }}
+              >
+                <CardContent className="p-6 flex justify-between items-center">
+                  <div>
+                    <h3 className="font-semibold">{exam.examName}</h3>
+                    <p className="text-sm text-gray-500">
+                      {exam.examCode} • {exam.masteredFlashcards}/{exam.totalFlashcards} mastered
+                    </p>
+                  </div>
                   <Badge variant="outline">
-                    {mockFlashcards.filter(c => c.topicName === topic).length} cards
+                    {Math.round((exam.masteredFlashcards / Math.max(exam.totalFlashcards, 1)) * 100)}% complete
                   </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
 
-  // Complete state
-  if (state === "complete") {
-    const knownPercent = Math.round((stats.known / stats.total) * 100);
-    
+  // No flashcards available
+  if (flashcards.length === 0) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold">Session Complete!</h1>
-        
+      <div className="max-w-2xl mx-auto">
         <Card>
-          <CardContent className="pt-6 text-center space-y-6">
-            <div className="text-5xl">🎉</div>
-            
-            <div className="text-xl">
-              You reviewed {stats.total} flashcards
+          <CardContent className="py-8 text-center">
+            <p className="text-gray-500 mb-4">No flashcards available for review right now.</p>
+            <p className="text-sm text-gray-400 mb-4">All flashcards have been mastered or aren't due for review yet.</p>
+            <Button onClick={() => setSelectingExam(true)}>Choose Another Exam</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // All cards reviewed
+  if (currentIndex >= flashcards.length) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Session Complete! 🎉</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="text-center py-8">
+              <div className="text-4xl font-bold text-blue-600 mb-2">{stats.reviewed}</div>
+              <p className="text-gray-500">Cards Reviewed</p>
+              {stats.mastered > 0 && (
+                <p className="text-green-600 mt-2">{stats.mastered} cards mastered!</p>
+              )}
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-green-50 rounded-lg p-4">
-                <div className="text-3xl font-bold text-green-600">{stats.known}</div>
-                <div className="text-sm text-green-700">Already knew</div>
-              </div>
-              <div className="bg-yellow-50 rounded-lg p-4">
-                <div className="text-3xl font-bold text-yellow-600">{stats.learning}</div>
-                <div className="text-sm text-yellow-700">Still learning</div>
-              </div>
-            </div>
-            
-            <Progress value={knownPercent} className="h-3" />
-            <p className="text-sm text-gray-500">{knownPercent}% known</p>
-            
-            <div className="pt-4 space-x-4">
-              <Button onClick={startStudying}>
-                Study Again
+            <div className="flex gap-4 justify-center">
+              <Button onClick={() => {
+                setCurrentIndex(0);
+                setStats({ reviewed: 0, mastered: 0 });
+                if (examId) fetchFlashcards(examId);
+              }}>
+                Review More
               </Button>
-              <Button variant="outline" onClick={() => setState("idle")}>
-                Back to Overview
+              <Button variant="outline" onClick={() => setSelectingExam(true)}>
+                Different Exam
               </Button>
             </div>
           </CardContent>
@@ -220,86 +209,101 @@ export default function FlashcardsPage() {
     );
   }
 
-  // Studying state
+  const currentCard = flashcards[currentIndex];
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Progress header */}
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm text-gray-600">
-          <span>Card {currentIndex + 1} of {cards.length}</span>
-          <span className="space-x-3">
-            <span className="text-green-600">✓ {stats.known}</span>
-            <span className="text-yellow-600">○ {stats.learning}</span>
-          </span>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-bold">Flashcards</h1>
+          <p className="text-sm text-gray-500">{stats.reviewed} reviewed this session</p>
         </div>
-        <Progress value={progress} className="h-2" />
+        <Badge variant="outline">
+          {currentIndex + 1} / {flashcards.length}
+        </Badge>
       </div>
+
+      <Progress value={((currentIndex + 1) / flashcards.length) * 100} className="h-2" />
 
       {/* Flashcard */}
-      <div 
+      <Card 
+        className="min-h-[300px] cursor-pointer transition-all duration-300 hover:shadow-lg"
         onClick={handleFlip}
-        className="cursor-pointer perspective-1000"
       >
-        <Card className={`min-h-[300px] transition-all duration-300 ${isFlipped ? 'bg-blue-50' : 'bg-white'}`}>
-          <CardContent className="pt-6 h-full flex flex-col">
-            {/* Topic badge */}
-            {currentCard?.topicName && (
-              <div className="flex justify-between items-center mb-4">
-                <Badge variant="outline">{currentCard.topicName}</Badge>
-                <Badge className={getMasteryColor(currentCard.masteryLevel)}>
-                  {getMasteryLabel(currentCard.masteryLevel)}
-                </Badge>
-              </div>
-            )}
-            
-            {/* Card content */}
-            <div className="flex-1 flex items-center justify-center text-center p-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">
-                  {isFlipped ? "Answer" : "Question"}
-                </p>
-                <p className="text-xl font-medium leading-relaxed">
-                  {isFlipped ? currentCard?.backText : currentCard?.frontText}
-                </p>
-              </div>
-            </div>
-            
-            {/* Flip hint */}
-            <div className="text-center text-sm text-gray-400 pb-2">
-              {isFlipped ? "Click to see question" : "Click to reveal answer"}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <CardContent className="p-8 flex flex-col items-center justify-center min-h-[300px]">
+          {currentCard.topic && (
+            <Badge 
+              variant="secondary" 
+              className={`mb-4 ${currentCard.progress ? getMasteryColor(currentCard.progress.masteryLevel) : "bg-gray-100"}`}
+            >
+              {currentCard.progress ? getMasteryLabel(currentCard.progress.masteryLevel) : "New"}
+            </Badge>
+          )}
+          
+          <div className="text-center">
+            <p className="text-xs text-gray-400 mb-2">
+              {isFlipped ? "ANSWER" : "QUESTION"}
+            </p>
+            <p className="text-xl leading-relaxed">
+              {isFlipped ? currentCard.backText : currentCard.frontText}
+            </p>
+          </div>
 
-      {/* Response buttons */}
+          {!isFlipped && (
+            <p className="text-sm text-gray-400 mt-8">Tap to reveal answer</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Rating buttons (only show when flipped) */}
       {isFlipped && (
-        <div className="flex space-x-4">
-          <Button 
-            variant="outline" 
-            className="flex-1 h-14 border-yellow-300 hover:bg-yellow-50"
-            onClick={() => handleResponse(false)}
-          >
-            <span className="text-lg mr-2">🤔</span>
-            Still Learning
-          </Button>
-          <Button 
-            className="flex-1 h-14 bg-green-600 hover:bg-green-700"
-            onClick={() => handleResponse(true)}
-          >
-            <span className="text-lg mr-2">✓</span>
-            Got It!
-          </Button>
+        <div className="space-y-4">
+          <p className="text-center text-sm text-gray-500">How well did you know this?</p>
+          <div className="grid grid-cols-3 gap-3">
+            <Button 
+              variant="outline" 
+              className="border-red-200 hover:bg-red-50"
+              onClick={() => handleRate(1)}
+            >
+              😕 Didn't know
+            </Button>
+            <Button 
+              variant="outline"
+              className="border-yellow-200 hover:bg-yellow-50"
+              onClick={() => handleRate(3)}
+            >
+              🤔 Hesitated
+            </Button>
+            <Button 
+              variant="outline"
+              className="border-green-200 hover:bg-green-50"
+              onClick={() => handleRate(5)}
+            >
+              😊 Knew it!
+            </Button>
+          </div>
         </div>
       )}
-      
-      {!isFlipped && (
-        <div className="text-center">
-          <Button variant="ghost" onClick={handleFlip}>
-            Show Answer
-          </Button>
-        </div>
+
+      {/* Topic info */}
+      {currentCard.topic && (
+        <p className="text-center text-sm text-gray-400">
+          Topic: {currentCard.topic.name}
+        </p>
       )}
     </div>
+  );
+}
+
+export default function FlashcardsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    }>
+      <FlashcardsContent />
+    </Suspense>
   );
 }
