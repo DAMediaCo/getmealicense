@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -11,96 +12,103 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 interface AnswerOption {
   id: string;
   optionText: string;
-  isCorrect: boolean;
 }
 
 interface Question {
   id: string;
   questionText: string;
   answerOptions: AnswerOption[];
+  topic?: { id: string; name: string };
 }
 
-// Mock exam questions
-const mockExamQuestions: Question[] = [
-  {
-    id: "e1",
-    questionText: "A policy loan is typically available on which type of life insurance?",
-    answerOptions: [
-      { id: "e1a", optionText: "Term life insurance", isCorrect: false },
-      { id: "e1b", optionText: "Whole life insurance", isCorrect: true },
-      { id: "e1c", optionText: "Group term life insurance", isCorrect: false },
-      { id: "e1d", optionText: "Decreasing term insurance", isCorrect: false },
-    ],
-  },
-  {
-    id: "e2",
-    questionText: "Which of the following is NOT a standard provision in life insurance policies?",
-    answerOptions: [
-      { id: "e2a", optionText: "Grace period", isCorrect: false },
-      { id: "e2b", optionText: "Incontestability clause", isCorrect: false },
-      { id: "e2c", optionText: "Guaranteed insurability rider", isCorrect: true },
-      { id: "e2d", optionText: "Suicide clause", isCorrect: false },
-    ],
-  },
-  {
-    id: "e3",
-    questionText: "The elimination period in a disability policy refers to:",
-    answerOptions: [
-      { id: "e3a", optionText: "The waiting period before benefits begin", isCorrect: true },
-      { id: "e3b", optionText: "The maximum benefit period", isCorrect: false },
-      { id: "e3c", optionText: "The contestability period", isCorrect: false },
-      { id: "e3d", optionText: "The policy renewal date", isCorrect: false },
-    ],
-  },
-  {
-    id: "e4",
-    questionText: "What type of annuity guarantees payments for the lifetime of the annuitant?",
-    answerOptions: [
-      { id: "e4a", optionText: "Period certain annuity", isCorrect: false },
-      { id: "e4b", optionText: "Life annuity", isCorrect: true },
-      { id: "e4c", optionText: "Fixed period annuity", isCorrect: false },
-      { id: "e4d", optionText: "Deferred annuity", isCorrect: false },
-    ],
-  },
-  {
-    id: "e5",
-    questionText: "Coinsurance in health insurance typically means:",
-    answerOptions: [
-      { id: "e5a", optionText: "The insured pays a percentage of covered expenses after the deductible", isCorrect: true },
-      { id: "e5b", optionText: "Two insurance companies share the risk", isCorrect: false },
-      { id: "e5c", optionText: "The insured must have two policies", isCorrect: false },
-      { id: "e5d", optionText: "The insurer pays 100% of all costs", isCorrect: false },
-    ],
-  },
-];
-
-type ExamState = "idle" | "active" | "paused" | "complete";
-
-export default function ExamPage() {
+function ExamContent() {
   const searchParams = useSearchParams();
-  const examId = searchParams.get("exam");
-  
-  const [examState, setExamState] = useState<ExamState>("idle");
+  const examId = searchParams.get("examId");
+  const { data: session } = useSession();
+
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [timeRemaining, setTimeRemaining] = useState(0); // in seconds
+  const [loading, setLoading] = useState(true);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [examInfo, setExamInfo] = useState<{ code: string; name: string; timeLimit: number } | null>(null);
+  
+  // Timer state
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [examStarted, setExamStarted] = useState(false);
+  const [examFinished, setExamFinished] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [results, setResults] = useState<{ correct: number; total: number; score: number } | null>(null);
+
+  // Exam selection
+  const [selectingExam, setSelectingExam] = useState(!examId);
+  const [availableExams, setAvailableExams] = useState<any[]>([]);
+  
+  // Dialogs
   const [showPauseDialog, setShowPauseDialog] = useState(false);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
 
-  const EXAM_TIME_MINUTES = 30; // 30 minute exam
-  const currentQuestion = questions[currentIndex];
-  const answeredCount = Object.keys(answers).length;
-  const progress = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
+  // Fetch available exams if none selected
+  useEffect(() => {
+    if (!examId && session) {
+      fetch("/api/student/progress")
+        .then(res => res.json())
+        .then(data => {
+          setAvailableExams(data.exams || []);
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
+    }
+  }, [examId, session]);
+
+  // Start exam
+  const startExam = async (selectedExamId: string) => {
+    setLoading(true);
+    setSelectingExam(false);
+    
+    try {
+      // Create timed exam session
+      const sessionRes = await fetch("/api/quiz/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          examId: selectedExamId, 
+          mode: "TIMED", 
+          totalQuestions: 50 // Full exam
+        }),
+      });
+      const sessionData = await sessionRes.json();
+      setSessionId(sessionData.session?.id);
+      
+      // Set time limit (default 2 hours if not set)
+      const timeLimitSeconds = sessionData.session?.timeRemaining || 7200;
+      setTimeRemaining(timeLimitSeconds);
+
+      // Fetch questions
+      const questionsRes = await fetch(`/api/quiz/questions?examId=${selectedExamId}&limit=50`);
+      const questionsData = await questionsRes.json();
+      
+      if (questionsData.questions?.length > 0) {
+        setQuestions(questionsData.questions);
+      }
+      
+      setExamStarted(true);
+    } catch (error) {
+      console.error("Error starting exam:", error);
+    }
+    setLoading(false);
+  };
 
   // Timer effect
   useEffect(() => {
-    if (examState !== "active" || timeRemaining <= 0) return;
+    if (!examStarted || isPaused || examFinished || timeRemaining <= 0) return;
 
     const timer = setInterval(() => {
       setTimeRemaining(prev => {
         if (prev <= 1) {
-          setExamState("complete");
+          clearInterval(timer);
+          handleTimeUp();
           return 0;
         }
         return prev - 1;
@@ -108,179 +116,205 @@ export default function ExamPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [examState, timeRemaining]);
+  }, [examStarted, isPaused, examFinished]);
+
+  const handleTimeUp = () => {
+    setExamFinished(true);
+    submitExam();
+  };
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    if (hrs > 0) {
+      return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const startExam = () => {
-    const shuffled = [...mockExamQuestions].sort(() => Math.random() - 0.5);
-    setQuestions(shuffled);
-    setCurrentIndex(0);
-    setAnswers({});
-    setTimeRemaining(EXAM_TIME_MINUTES * 60);
-    setExamState("active");
-  };
-
-  const pauseExam = () => {
-    setExamState("paused");
+  const handlePause = async () => {
+    setIsPaused(true);
     setShowPauseDialog(true);
+    
+    // Save state to server
+    if (sessionId) {
+      await fetch("/api/quiz/session", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          action: "pause",
+          timeRemaining,
+          questionIndex: currentIndex,
+        }),
+      });
+    }
   };
 
-  const resumeExam = () => {
+  const handleResume = async () => {
+    setIsPaused(false);
     setShowPauseDialog(false);
-    setExamState("active");
+    
+    if (sessionId) {
+      await fetch("/api/quiz/session", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          action: "resume",
+        }),
+      });
+    }
   };
 
-  const handleAnswerSelect = (optionId: string) => {
-    if (!currentQuestion) return;
-    setAnswers(prev => ({
-      ...prev,
-      [currentQuestion.id]: optionId,
-    }));
+  const handleSelectAnswer = (questionId: string, optionId: string) => {
+    setAnswers(prev => ({ ...prev, [questionId]: optionId }));
   };
 
-  const goToQuestion = (index: number) => {
-    setCurrentIndex(index);
-  };
-
-  const submitExam = () => {
+  const submitExam = async () => {
+    setExamFinished(true);
     setShowSubmitDialog(false);
-    setExamState("complete");
-  };
 
-  const calculateScore = () => {
+    // Submit all answers
     let correct = 0;
-    questions.forEach(q => {
-      const selectedId = answers[q.id];
-      const selectedOption = q.answerOptions.find(o => o.id === selectedId);
-      if (selectedOption?.isCorrect) correct++;
-    });
-    return {
-      correct,
-      total: questions.length,
-      percentage: Math.round((correct / questions.length) * 100),
-    };
+    for (const question of questions) {
+      const selectedOption = answers[question.id];
+      if (selectedOption) {
+        try {
+          const res = await fetch("/api/quiz/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              questionId: question.id,
+              selectedOptionId: selectedOption,
+              quizSessionId: sessionId,
+            }),
+          });
+          const data = await res.json();
+          if (data.isCorrect) correct++;
+        } catch (error) {
+          console.error("Error submitting answer:", error);
+        }
+      }
+    }
+
+    // Complete session
+    if (sessionId) {
+      await fetch("/api/quiz/session", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          action: "complete",
+        }),
+      });
+    }
+
+    const score = Math.round((correct / questions.length) * 100);
+    setResults({ correct, total: questions.length, score });
+    setShowResults(true);
   };
 
-  // Idle state
-  if (examState === "idle") {
+  const answeredCount = Object.keys(answers).length;
+  const unansweredCount = questions.length - answeredCount;
+
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Exam selection screen
+  if (selectingExam) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold">Timed Exam</h1>
+        <p className="text-gray-500">Select an exam to begin. This will simulate real exam conditions with a timer.</p>
         
-        <Card>
-          <CardHeader>
-            <CardTitle>Practice Exam - FL 2-15</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-gray-600">
-              Simulate the real exam experience with a timed practice test. 
-              You can pause and resume if needed.
+        <Card className="bg-yellow-50 border-yellow-200">
+          <CardContent className="py-4">
+            <p className="text-yellow-800 text-sm">
+              ⚠️ Once started, the timer will run continuously. You can pause and resume, but plan accordingly.
             </p>
-            
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <h4 className="font-medium text-amber-800 mb-2">⚠️ Exam Rules</h4>
-              <ul className="text-sm text-amber-700 space-y-1">
-                <li>• {mockExamQuestions.length} questions, {EXAM_TIME_MINUTES} minutes</li>
-                <li>• Passing score: 70%</li>
-                <li>• You can navigate between questions</li>
-                <li>• Pause available (time stops)</li>
-                <li>• No explanations until after submission</li>
-              </ul>
-            </div>
-            
-            <Button onClick={startExam} size="lg" className="w-full">
-              Start Exam
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Complete state
-  if (examState === "complete") {
-    const score = calculateScore();
-    const passed = score.percentage >= 70;
-    
-    return (
-      <div className="max-w-2xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold">Exam Complete</h1>
-        
-        <Card>
-          <CardContent className="pt-6 text-center space-y-6">
-            <div className={`text-6xl font-bold ${passed ? 'text-green-600' : 'text-red-600'}`}>
-              {score.percentage}%
-            </div>
-            
-            <div className="text-xl">
-              {score.correct} out of {score.total} correct
-            </div>
-            
-            <Badge className={`text-lg px-4 py-2 ${passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {passed ? '✓ PASSED' : '✗ DID NOT PASS'}
-            </Badge>
-            
-            <p className="text-gray-500">
-              {passed 
-                ? "Great job! You're on track for the real exam." 
-                : "Keep studying! Review the topics you missed."}
-            </p>
-            
-            <div className="pt-4 space-x-4">
-              <Button onClick={startExam}>
-                Retake Exam
-              </Button>
-              <Button variant="outline" onClick={() => setExamState("idle")}>
-                Back to Overview
-              </Button>
-            </div>
           </CardContent>
         </Card>
 
-        {/* Results breakdown */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Answer Review</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {questions.map((q, idx) => {
-                const selectedId = answers[q.id];
-                const selectedOption = q.answerOptions.find(o => o.id === selectedId);
-                const correctOption = q.answerOptions.find(o => o.isCorrect);
-                const isCorrect = selectedOption?.isCorrect;
-                
-                return (
-                  <div 
-                    key={q.id}
-                    className={`p-3 rounded-lg ${isCorrect ? 'bg-green-50' : 'bg-red-50'}`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">
-                          {idx + 1}. {q.questionText}
-                        </p>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Your answer: {selectedOption?.optionText || "Not answered"}
-                        </p>
-                        {!isCorrect && (
-                          <p className="text-xs text-green-700 mt-1">
-                            Correct: {correctOption?.optionText}
-                          </p>
-                        )}
-                      </div>
-                      <span className={isCorrect ? 'text-green-600' : 'text-red-600'}>
-                        {isCorrect ? '✓' : '✗'}
-                      </span>
+        {availableExams.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-gray-500">
+              No exams assigned yet. Contact your manager.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {availableExams.map((exam) => (
+              <Card 
+                key={exam.examId} 
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => {
+                  window.history.pushState({}, "", `?examId=${exam.examId}`);
+                  startExam(exam.examId);
+                }}
+              >
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-semibold text-lg">{exam.examName}</h3>
+                      <p className="text-sm text-gray-500">{exam.examCode}</p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        {exam.totalQuestions} questions • ~2 hours
+                      </p>
                     </div>
+                    <Button>Start Exam</Button>
                   </div>
-                );
-              })}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Results screen
+  if (showResults && results) {
+    const passed = results.score >= 70;
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Exam Complete!</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className={`text-center py-8 rounded-lg ${passed ? "bg-green-50" : "bg-red-50"}`}>
+              <div className={`text-6xl font-bold mb-2 ${passed ? "text-green-600" : "text-red-600"}`}>
+                {results.score}%
+              </div>
+              <p className={passed ? "text-green-700" : "text-red-700"}>
+                {passed ? "🎉 Congratulations! You passed!" : "Keep studying and try again"}
+              </p>
+              <p className="text-gray-500 mt-2">
+                {results.correct} of {results.total} correct (70% required to pass)
+              </p>
+            </div>
+            
+            <div className="flex gap-4 justify-center">
+              <Button onClick={() => {
+                setShowResults(false);
+                setExamFinished(false);
+                setExamStarted(false);
+                setAnswers({});
+                setCurrentIndex(0);
+                setSelectingExam(true);
+              }}>
+                Try Another Exam
+              </Button>
+              <Button variant="outline" onClick={() => window.location.href = "/dashboard"}>
+                Back to Dashboard
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -288,127 +322,118 @@ export default function ExamPage() {
     );
   }
 
-  // Active/Paused state
+  // No questions
+  if (questions.length === 0) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-gray-500 mb-4">No questions available for this exam.</p>
+            <Button onClick={() => setSelectingExam(true)}>Choose Another Exam</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const currentQuestion = questions[currentIndex];
+
   return (
     <div className="max-w-4xl mx-auto space-y-4">
-      {/* Header with timer */}
+      {/* Timer and Controls Header */}
       <div className="sticky top-0 bg-white z-10 py-4 border-b">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-lg font-bold">Practice Exam</h1>
+            <h1 className="text-xl font-bold">Timed Exam</h1>
             <p className="text-sm text-gray-500">
-              {answeredCount} of {questions.length} answered
+              Question {currentIndex + 1} of {questions.length}
             </p>
           </div>
           
-          <div className="flex items-center space-x-4">
-            <div className={`text-2xl font-mono font-bold ${timeRemaining < 300 ? 'text-red-600' : ''}`}>
+          <div className="flex items-center gap-4">
+            <div className={`text-2xl font-mono font-bold ${timeRemaining < 300 ? "text-red-600" : ""}`}>
               ⏱️ {formatTime(timeRemaining)}
             </div>
-            <Button variant="outline" size="sm" onClick={pauseExam}>
+            <Button variant="outline" onClick={handlePause}>
               Pause
             </Button>
-            <Button size="sm" onClick={() => setShowSubmitDialog(true)}>
+            <Button onClick={() => setShowSubmitDialog(true)}>
               Submit Exam
             </Button>
           </div>
         </div>
-        <Progress value={progress} className="h-2 mt-2" />
+        
+        <Progress value={(currentIndex / questions.length) * 100} className="mt-4 h-2" />
+        
+        <p className="text-xs text-gray-400 mt-2">
+          {answeredCount} answered • {unansweredCount} remaining
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Question navigation */}
-        <div className="lg:col-span-1 order-2 lg:order-1">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Questions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-5 gap-2">
-                {questions.map((q, idx) => (
-                  <button
-                    key={q.id}
-                    onClick={() => goToQuestion(idx)}
-                    className={`
-                      w-8 h-8 rounded text-sm font-medium
-                      ${idx === currentIndex ? 'ring-2 ring-blue-500' : ''}
-                      ${answers[q.id] 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }
-                    `}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+      {/* Question */}
+      <Card>
+        <CardHeader>
+          {currentQuestion.topic && (
+            <Badge variant="secondary" className="w-fit mb-2">
+              {currentQuestion.topic.name}
+            </Badge>
+          )}
+          <CardTitle className="text-lg font-medium leading-relaxed">
+            {currentQuestion.questionText}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {currentQuestion.answerOptions.map((option) => (
+            <Button
+              key={option.id}
+              variant="outline"
+              className={`w-full justify-start text-left h-auto py-3 px-4 ${
+                answers[currentQuestion.id] === option.id
+                  ? "bg-blue-100 border-blue-500"
+                  : ""
+              }`}
+              onClick={() => handleSelectAnswer(currentQuestion.id, option.id)}
+            >
+              {option.optionText}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Navigation */}
+      <div className="flex justify-between">
+        <Button
+          variant="outline"
+          onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
+          disabled={currentIndex === 0}
+        >
+          ← Previous
+        </Button>
+        
+        <div className="flex gap-2">
+          {/* Question jump buttons */}
+          {questions.slice(Math.max(0, currentIndex - 2), currentIndex + 3).map((q, idx) => {
+            const actualIdx = Math.max(0, currentIndex - 2) + idx;
+            return (
+              <Button
+                key={q.id}
+                variant={actualIdx === currentIndex ? "default" : "outline"}
+                size="sm"
+                className={`w-8 h-8 p-0 ${answers[q.id] ? "bg-green-100 border-green-300" : ""}`}
+                onClick={() => setCurrentIndex(actualIdx)}
+              >
+                {actualIdx + 1}
+              </Button>
+            );
+          })}
         </div>
 
-        {/* Current question */}
-        <div className="lg:col-span-3 order-1 lg:order-2">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <Badge variant="outline">Question {currentIndex + 1}</Badge>
-              </div>
-              <CardTitle className="text-lg leading-relaxed mt-2">
-                {currentQuestion?.questionText}
-              </CardTitle>
-            </CardHeader>
-            
-            <CardContent className="space-y-4">
-              {/* Answer options */}
-              <div className="space-y-3">
-                {currentQuestion?.answerOptions.map((option, idx) => {
-                  const isSelected = answers[currentQuestion.id] === option.id;
-                  
-                  return (
-                    <div
-                      key={option.id}
-                      onClick={() => handleAnswerSelect(option.id)}
-                      className={`
-                        p-4 rounded-lg border-2 cursor-pointer transition-all
-                        ${isSelected 
-                          ? 'border-blue-500 bg-blue-50' 
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                        }
-                      `}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <span className={`
-                          w-6 h-6 rounded-full border-2 flex items-center justify-center text-sm
-                          ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300'}
-                        `}>
-                          {String.fromCharCode(65 + idx)}
-                        </span>
-                        <span>{option.optionText}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Navigation */}
-              <div className="flex justify-between pt-4">
-                <Button 
-                  variant="outline"
-                  onClick={() => goToQuestion(Math.max(0, currentIndex - 1))}
-                  disabled={currentIndex === 0}
-                >
-                  ← Previous
-                </Button>
-                <Button 
-                  onClick={() => goToQuestion(Math.min(questions.length - 1, currentIndex + 1))}
-                  disabled={currentIndex === questions.length - 1}
-                >
-                  Next →
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Button
+          onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))}
+          disabled={currentIndex === questions.length - 1}
+        >
+          Next →
+        </Button>
       </div>
 
       {/* Pause Dialog */}
@@ -417,51 +442,59 @@ export default function ExamPage() {
           <DialogHeader>
             <DialogTitle>Exam Paused</DialogTitle>
           </DialogHeader>
-          <p className="text-gray-600">
-            Your exam is paused. The timer has stopped. Click resume when you're ready to continue.
-          </p>
+          <div className="py-4">
+            <p className="text-gray-500">
+              Your exam is paused. The timer has stopped. You can resume whenever you're ready.
+            </p>
+            <p className="text-sm text-gray-400 mt-4">
+              Time remaining: {formatTime(timeRemaining)}
+            </p>
+          </div>
           <DialogFooter>
-            <Button onClick={resumeExam}>Resume Exam</Button>
+            <Button onClick={handleResume}>Resume Exam</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Submit Dialog */}
+      {/* Submit Confirmation Dialog */}
       <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Submit Exam?</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-gray-600">
+          <div className="py-4">
+            <p className="text-gray-500">
               Are you sure you want to submit your exam?
             </p>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex justify-between">
-                <span>Questions answered:</span>
-                <span className="font-medium">{answeredCount} of {questions.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Time remaining:</span>
-                <span className="font-medium">{formatTime(timeRemaining)}</span>
-              </div>
-            </div>
-            {answeredCount < questions.length && (
-              <p className="text-amber-600 text-sm">
-                ⚠️ You have {questions.length - answeredCount} unanswered question(s).
+            {unansweredCount > 0 && (
+              <p className="text-yellow-600 mt-2">
+                ⚠️ You have {unansweredCount} unanswered question{unansweredCount > 1 ? "s" : ""}.
               </p>
             )}
+            <p className="text-sm text-gray-400 mt-4">
+              Time remaining: {formatTime(timeRemaining)}
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSubmitDialog(false)}>
               Continue Exam
             </Button>
-            <Button onClick={submitExam}>
-              Submit Exam
-            </Button>
+            <Button onClick={submitExam}>Submit Exam</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ExamPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    }>
+      <ExamContent />
+    </Suspense>
   );
 }
