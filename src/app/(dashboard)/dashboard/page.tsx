@@ -112,7 +112,7 @@ export default function StudentDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
           <Link href="/dashboard/quiz">
             <CardHeader className="pb-2">
@@ -142,6 +142,17 @@ export default function StudentDashboard() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-500">Simulate the real exam experience</p>
+            </CardContent>
+          </Link>
+        </Card>
+
+        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Link href="/courses">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">📚 Study Courses</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-500">Florida Laws & Review Notes with audio</p>
             </CardContent>
           </Link>
         </Card>
