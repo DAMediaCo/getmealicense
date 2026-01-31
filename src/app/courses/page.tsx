@@ -311,8 +311,21 @@ export default function CourseReader() {
   // Course selection view
   if (!currentCourse) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="max-w-4xl mx-auto">
+      <div className="min-h-screen bg-slate-50">
+        {/* Navigation Header */}
+        <nav className="bg-white border-b sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <a href="/dashboard" className="font-bold text-xl text-blue-600 hover:text-blue-700">
+                  GetMeALicense
+                </a>
+              </div>
+            </div>
+          </div>
+        </nav>
+        
+        <div className="max-w-4xl mx-auto p-6">
           <h1 className="text-2xl font-bold mb-2">📚 Your Courses</h1>
           <p className="text-slate-500 mb-6">Select a course to continue studying</p>
           
