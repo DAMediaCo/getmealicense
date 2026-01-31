@@ -34,5 +34,7 @@ export const config = {
     "/dashboard/:path*",
     "/manager/:path*",
     "/student/:path*",
+    "/courses",
+    "/courses/:path*",
   ],
 };
