@@ -1,6 +1,18 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy-initialize Resend client to avoid build-time issues
+let resend: Resend | null = null;
+
+function getResendClient(): Resend {
+  if (!resend) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error("RESEND_API_KEY environment variable is not set");
+    }
+    resend = new Resend(apiKey);
+  }
+  return resend;
+}
 
 // Use Resend's test domain until getmealicense.com is verified
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "GetMeALicense <onboarding@resend.dev>";
@@ -17,7 +29,7 @@ export async function sendInviteEmail({
   managerName?: string;
 }) {
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to,
       subject: "You've been invited to GetMeALicense",
@@ -85,7 +97,7 @@ export async function sendPasswordResetEmail({
   resetUrl: string;
 }) {
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to,
       subject: "Reset your GetMeALicense password",
