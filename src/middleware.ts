@@ -31,10 +31,12 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/manager/:path*",
-    "/student/:path*",
-    "/courses",
-    "/courses/:path*",
-  ],
+    /*
+     * Match all paths except:
+     * - /login, /register (auth pages)
+     * - /api (API routes)
+     * - /_next (Next.js internals)
+     * - /favicon.ico, /robots.txt, etc (static files)
+     */
+    "/((?!login|register|api|_next|favicon.ico|robots.txt|.*\\..*).*)"],
 };
