@@ -5,3 +5,8 @@ node_modules
 .env.seed
 *.log
 .credentials
+
+# Audio files (served from R2 CDN)
+public/courses/audio/
+!public/courses/audio/manifest.json
+
