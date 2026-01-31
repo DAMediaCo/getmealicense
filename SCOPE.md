@@ -140,12 +140,43 @@ Based on:
 
 ---
 
+## Client Deployment Model
+
+**Client provides domain + Vercel hosting. We handle everything else.**
+
+### What the Client Provides
+- Their own domain (parked on GoDaddy)
+- Their own Vercel account (Pro plan - $20/month)
+
+### What We Provide (Shared Infrastructure)
+- Supabase database (our account)
+- Resend email API (our account)
+- GitHub repo access
+- All backend services
+
+### Onboarding Process
+1. Client creates Vercel account at vercel.com
+2. We deploy the app to their Vercel
+3. We configure env vars pointing to our Supabase/Resend
+4. Client points domain DNS from GoDaddy → Vercel
+5. We create their manager account in our DB
+6. Done - they're live
+
+### Benefits
+- Simple for client (just domain + $20/mo Vercel)
+- We control the infrastructure
+- Easy to support/update across clients
+- Predictable cost model
+
+---
+
 ## Status
-- [ ] Credentials received
-- [ ] Project initialized
-- [ ] Database schema created
-- [ ] Auth flow implemented
-- [ ] Student features built
-- [ ] Manager dashboard built
-- [ ] Deployed to Vercel
+- [x] Credentials received
+- [x] Project initialized
+- [x] Database schema created
+- [x] Auth flow implemented
+- [x] Student features built
+- [x] Manager dashboard built
+- [x] Deployed to Vercel (demo instance)
 - [ ] Domain connected
+- [ ] Client onboarding documentation

@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Reader - GetMeALicense</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --success: #22c55e;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        header h1 { font-size: 1.25rem; font-weight: 600; }
+        
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .back-btn {
+            color: var(--primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.9rem;
+        }
+        
+        .user-info .email { color: var(--text-muted); }
+        
+        .auth-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        
+        .auth-btn.secondary {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+        
+        .sync-status {
+            font-size: 0.75rem;
+            color: var(--success);
+        }
+        
+        /* Course Selection */
+        .course-select {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+        
+        .course-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .course-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+        }
+        
+        .course-card h2 { font-size: 1.25rem; margin-bottom: 8px; }
+        .course-card p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px; }
+        
+        .course-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            margin-top: 16px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: var(--success);
+            transition: width 0.3s;
+        }
+        
+        /* Reader Layout */
+        .reader-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 24px;
+            margin-top: 24px;
+        }
+        
+        @media (max-width: 768px) {
+            .reader-layout { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+            .sidebar.open {
+                display: block;
+                position: fixed;
+                left: 0; top: 60px; bottom: 0;
+                width: 280px;
+                z-index: 99;
+                background: var(--card-bg);
+                overflow-y: auto;
+                box-shadow: 4px 0 12px rgba(0,0,0,0.1);
+            }
+        }
+        
+        .sidebar {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            height: fit-content;
+            position: sticky;
+            top: 80px;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+        
+        .sidebar h3 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+        
+        .chapter-list { list-style: none; }
+        
+        .chapter-item {
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+        
+        .chapter-item:hover { background: var(--bg); }
+        .chapter-item.active { background: #eff6ff; color: var(--primary); }
+        .chapter-item.completed::before { content: '✓'; color: var(--success); font-weight: bold; }
+        
+        /* Content Area */
+        .content-area {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+        }
+        
+        .content-header {
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .content-header h2 { font-size: 1.5rem; margin-bottom: 8px; }
+        
+        .chapter-nav {
+            display: flex;
+            gap: 12px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        
+        /* TTS Controls */
+        .tts-controls {
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        
+        .tts-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+        
+        .tts-btn:hover { background: var(--primary-dark); }
+        .tts-btn.playing { background: #dc2626; }
+        
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .speed-control select {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: white;
+        }
+        
+        /* Content Text */
+        .chapter-content { font-size: 1.05rem; line-height: 1.8; }
+        .chapter-content p { margin-bottom: 16px; }
+        .chapter-content ul, .chapter-content ol { margin: 16px 0; padding-left: 24px; }
+        .chapter-content li { margin-bottom: 8px; }
+        
+        /* Navigation Buttons */
+        .nav-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+        }
+        
+        .nav-btn {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        
+        .nav-btn:hover { background: var(--border); }
+        .nav-btn.primary { background: var(--primary); color: white; border-color: var(--primary); }
+        .nav-btn.primary:hover { background: var(--primary-dark); }
+        .nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .mark-complete {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        
+        .mark-complete input { width: 18px; height: 18px; }
+        
+        .hidden { display: none !important; }
+        
+        .menu-toggle {
+            display: none;
+            background: none;
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 768px) {
+            .menu-toggle { display: block; }
+        }
+        
+        /* Auth Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+        
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 400px;
+            width: 90%;
+        }
+        
+        .modal h2 { margin-bottom: 16px; }
+        .modal input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 12px;
+            font-size: 1rem;
+        }
+        
+        .modal .btn-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        
+        .modal button { flex: 1; }
+        
+        .error-msg { color: #dc2626; font-size: 0.85rem; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="/" class="back-btn" id="backBtn">← Back</a>
+            <h1 id="headerTitle">Course Reader</h1>
+            <div class="user-info" id="userInfo">
+                <span class="sync-status" id="syncStatus"></span>
+                <span class="email" id="userEmail"></span>
+                <button class="auth-btn" id="authBtn" onclick="showAuthModal()">Sign In</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Course Selection View -->
+    <div id="courseSelectView" class="container">
+        <h1 style="margin-bottom: 8px;">📚 Your Courses</h1>
+        <p style="color: var(--text-muted); margin-bottom: 24px;">Select a course to continue studying</p>
+        <div class="course-select" id="courseList"></div>
+    </div>
+
+    <!-- Reader View -->
+    <div id="readerView" class="container hidden">
+        <div class="reader-layout">
+            <aside class="sidebar" id="sidebar">
+                <h3>Chapters</h3>
+                <ul class="chapter-list" id="chapterList"></ul>
+            </aside>
+            
+            <main class="content-area">
+                <div class="content-header">
+                    <h2 id="chapterTitle">Chapter Title</h2>
+                    <div class="chapter-nav">
+                        <span id="chapterProgress">Chapter 1 of 10</span>
+                        <span>•</span>
+                        <span id="wordCount">0 words</span>
+                        <span>•</span>
+                        <span id="readTime">0 min read</span>
+                    </div>
+                </div>
+                
+                <div class="tts-controls">
+                    <button class="tts-btn" id="ttsBtn" onclick="toggleTTS()">
+                        <span id="ttsIcon">▶</span>
+                        <span id="ttsLabel">Listen</span>
+                    </button>
+                    <button class="tts-btn" style="background: #6b7280;" onclick="stopTTS()">⏹ Stop</button>
+                    <div class="speed-control">
+                        <label>Speed:</label>
+                        <select id="ttsSpeed" onchange="updateSpeed()">
+                            <option value="0.75">0.75x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="1.25">1.25x</option>
+                            <option value="1.5">1.5x</option>
+                            <option value="2">2x</option>
+                        </select>
+                    </div>
+                    <div class="speed-control">
+                        <label>Voice:</label>
+                        <select id="ttsVoice" onchange="updateVoice()"></select>
+                    </div>
+                </div>
+                
+                <div class="chapter-content" id="chapterContent"></div>
+                
+                <div class="mark-complete">
+                    <input type="checkbox" id="markComplete" onchange="toggleComplete()">
+                    <label for="markComplete">Mark chapter as complete</label>
+                </div>
+                
+                <div class="nav-buttons">
+                    <button class="nav-btn" id="prevBtn" onclick="prevChapter()">← Previous</button>
+                    <button class="nav-btn primary" id="nextBtn" onclick="nextChapter()">Next →</button>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2 id="authModalTitle">Sign In</h2>
+            <p id="authModalDesc" style="color: var(--text-muted); margin-bottom: 16px;">Sign in to sync your progress across devices</p>
+            <div id="authError" class="error-msg hidden"></div>
+            <input type="email" id="authEmail" placeholder="Email">
+            <input type="password" id="authPassword" placeholder="Password">
+            <div class="btn-row">
+                <button class="auth-btn secondary" onclick="hideAuthModal()">Cancel</button>
+                <button class="auth-btn" id="authSubmitBtn" onclick="submitAuth()">Sign In</button>
+            </div>
+            <p style="text-align: center; margin-top: 16px; font-size: 0.85rem;">
+                <a href="#" id="authToggle" onclick="toggleAuthMode(event)">Need an account? Sign up</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Supabase config
+        const SUPABASE_URL = 'https://inlxtzpylpghvpjzdxzx.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlubHh0enB5bHBnaHZwanpkeHp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3MzMxODgsImV4cCI6MjA4NTMwOTE4OH0.CThPmrVkSk66GWUXAIiznYnqPL0ytgYLZeBFvkbpAcM';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // State
+        let courses = {};
+        let currentCourse = null;
+        let currentChapterIndex = 0;
+        let progress = {};
+        let user = null;
+        let synth = window.speechSynthesis;
+        let utterance = null;
+        let isSpeaking = false;
+        let voices = [];
+        let isSignUp = false;
+        
+        // Init
+        async function init() {
+            // Check auth state
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                user = session.user;
+                updateAuthUI();
+                await loadProgressFromSupabase();
+            } else {
+                loadProgressFromLocal();
+            }
+            
+            // Listen for auth changes
+            supabase.auth.onAuthStateChange(async (event, session) => {
+                user = session?.user || null;
+                updateAuthUI();
+                if (user) {
+                    await syncProgressToSupabase();
+                    await loadProgressFromSupabase();
+                }
+            });
+            
+            // Load courses
+            try {
+                const [flLaws, reviewNotes] = await Promise.all([
+                    fetch('/courses/florida_laws.json').then(r => r.json()),
+                    fetch('/courses/review_notes.json').then(r => r.json())
+                ]);
+                courses = { florida_laws_lh: flLaws, review_notes_lh: reviewNotes };
+                renderCourseSelect();
+            } catch (err) {
+                console.error('Failed to load courses:', err);
+                document.getElementById('courseList').innerHTML = '<p>Failed to load courses.</p>';
+            }
+            
+            loadVoices();
+            synth.onvoiceschanged = loadVoices;
+        }
+        
+        function updateAuthUI() {
+            const authBtn = document.getElementById('authBtn');
+            const userEmail = document.getElementById('userEmail');
+            const syncStatus = document.getElementById('syncStatus');
+            
+            if (user) {
+                userEmail.textContent = user.email;
+                authBtn.textContent = 'Sign Out';
+                authBtn.onclick = signOut;
+                syncStatus.textContent = '☁️ Synced';
+            } else {
+                userEmail.textContent = '';
+                authBtn.textContent = 'Sign In';
+                authBtn.onclick = showAuthModal;
+                syncStatus.textContent = '';
+            }
+        }
+        
+        // Progress Management
+        function loadProgressFromLocal() {
+            const saved = localStorage.getItem('gmal_progress');
+            if (saved) progress = JSON.parse(saved);
+        }
+        
+        function saveProgressToLocal() {
+            localStorage.setItem('gmal_progress', JSON.stringify(progress));
+        }
+        
+        async function loadProgressFromSupabase() {
+            if (!user) return;
+            
+            try {
+                const { data, error } = await supabase
+                    .from('course_progress')
+                    .select('course_id, chapter_index, completed')
+                    .eq('user_id', user.id);
+                
+                if (error) throw error;
+                
+                // Convert to our format
+                progress = {};
+                data.forEach(row => {
+                    if (!progress[row.course_id]) progress[row.course_id] = {};
+                    progress[row.course_id][row.chapter_index] = row.completed;
+                });
+                
+                // Also save to local as backup
+                saveProgressToLocal();
+                renderCourseSelect();
+            } catch (err) {
+                console.error('Failed to load progress from Supabase:', err);
+            }
+        }
+        
+        async function syncProgressToSupabase() {
+            if (!user) return;
+            
+            // Merge local progress to Supabase
+            const localProgress = JSON.parse(localStorage.getItem('gmal_progress') || '{}');
+            
+            for (const courseId of Object.keys(localProgress)) {
+                for (const [chapterIndex, completed] of Object.entries(localProgress[courseId])) {
+                    if (completed) {
+                        await saveChapterProgress(courseId, parseInt(chapterIndex), true);
+                    }
+                }
+            }
+        }
+        
+        async function saveChapterProgress(courseId, chapterIndex, completed) {
+            // Always save locally
+            if (!progress[courseId]) progress[courseId] = {};
+            progress[courseId][chapterIndex] = completed;
+            saveProgressToLocal();
+            
+            // Save to Supabase if logged in
+            if (user) {
+                try {
+                    const { error } = await supabase
+                        .from('course_progress')
+                        .upsert({
+                            user_id: user.id,
+                            course_id: courseId,
+                            chapter_index: chapterIndex,
+                            completed: completed
+                        }, {
+                            onConflict: 'user_id,course_id,chapter_index'
+                        });
+                    
+                    if (error) throw error;
+                    document.getElementById('syncStatus').textContent = '☁️ Saved';
+                } catch (err) {
+                    console.error('Failed to save to Supabase:', err);
+                    document.getElementById('syncStatus').textContent = '⚠️ Sync failed';
+                }
+            }
+        }
+        
+        // Auth Functions
+        function showAuthModal() {
+            document.getElementById('authModal').classList.remove('hidden');
+            document.getElementById('authEmail').focus();
+        }
+        
+        function hideAuthModal() {
+            document.getElementById('authModal').classList.add('hidden');
+            document.getElementById('authError').classList.add('hidden');
+            document.getElementById('authEmail').value = '';
+            document.getElementById('authPassword').value = '';
+        }
+        
+        function toggleAuthMode(e) {
+            e.preventDefault();
+            isSignUp = !isSignUp;
+            document.getElementById('authModalTitle').textContent = isSignUp ? 'Create Account' : 'Sign In';
+            document.getElementById('authSubmitBtn').textContent = isSignUp ? 'Sign Up' : 'Sign In';
+            document.getElementById('authToggle').textContent = isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up';
+        }
+        
+        async function submitAuth() {
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            const errorEl = document.getElementById('authError');
+            
+            if (!email || !password) {
+                errorEl.textContent = 'Please enter email and password';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                let result;
+                if (isSignUp) {
+                    result = await supabase.auth.signUp({ email, password });
+                } else {
+                    result = await supabase.auth.signInWithPassword({ email, password });
+                }
+                
+                if (result.error) throw result.error;
+                
+                hideAuthModal();
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.classList.remove('hidden');
+            }
+        }
+        
+        async function signOut() {
+            await supabase.auth.signOut();
+            user = null;
+            updateAuthUI();
+        }
+        
+        // TTS Functions
+        function loadVoices() {
+            voices = synth.getVoices().filter(v => v.lang.startsWith('en'));
+            const select = document.getElementById('ttsVoice');
+            select.innerHTML = voices.map((v, i) => 
+                `<option value="${i}" ${v.default ? 'selected' : ''}>${v.name.split(' ').slice(0,3).join(' ')}</option>`
+            ).join('');
+        }
+        
+        function toggleTTS() {
+            if (isSpeaking) {
+                synth.pause();
+                isSpeaking = false;
+                document.getElementById('ttsIcon').textContent = '▶';
+                document.getElementById('ttsLabel').textContent = 'Resume';
+                document.getElementById('ttsBtn').classList.remove('playing');
+            } else if (synth.paused) {
+                synth.resume();
+                isSpeaking = true;
+                document.getElementById('ttsIcon').textContent = '⏸';
+                document.getElementById('ttsLabel').textContent = 'Pause';
+                document.getElementById('ttsBtn').classList.add('playing');
+            } else {
+                startTTS();
+            }
+        }
+        
+        function startTTS() {
+            const chapter = currentCourse.chapters[currentChapterIndex];
+            utterance = new SpeechSynthesisUtterance(chapter.content);
+            utterance.rate = parseFloat(document.getElementById('ttsSpeed').value);
+            
+            const voiceIndex = document.getElementById('ttsVoice').value;
+            if (voices[voiceIndex]) utterance.voice = voices[voiceIndex];
+            
+            utterance.onend = () => stopTTS();
+            utterance.onerror = () => stopTTS();
+            
+            synth.speak(utterance);
+            isSpeaking = true;
+            
+            document.getElementById('ttsIcon').textContent = '⏸';
+            document.getElementById('ttsLabel').textContent = 'Pause';
+            document.getElementById('ttsBtn').classList.add('playing');
+        }
+        
+        function stopTTS() {
+            synth.cancel();
+            isSpeaking = false;
+            document.getElementById('ttsIcon').textContent = '▶';
+            document.getElementById('ttsLabel').textContent = 'Listen';
+            document.getElementById('ttsBtn').classList.remove('playing');
+        }
+        
+        function updateSpeed() {
+            if (isSpeaking) { stopTTS(); startTTS(); }
+        }
+        
+        function updateVoice() {
+            if (isSpeaking) { stopTTS(); startTTS(); }
+        }
+        
+        // Course/Chapter Functions
+        function getCourseProgress(courseId) {
+            if (!progress[courseId]) return 0;
+            const course = courses[courseId];
+            if (!course) return 0;
+            const completed = Object.values(progress[courseId]).filter(v => v).length;
+            return Math.round((completed / course.totalChapters) * 100);
+        }
+        
+        function renderCourseSelect() {
+            const list = document.getElementById('courseList');
+            list.innerHTML = Object.values(courses).map(course => {
+                const prog = getCourseProgress(course.courseId);
+                return `
+                    <div class="course-card" onclick="openCourse('${course.courseId}')">
+                        <h2>${course.title}</h2>
+                        <p>${course.description}</p>
+                        <div class="course-meta">
+                            <span>📖 ${course.totalChapters} chapters</span>
+                            <span>✓ ${prog}% complete</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${prog}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function openCourse(courseId) {
+            currentCourse = courses[courseId];
+            currentChapterIndex = 0;
+            
+            if (progress[courseId]) {
+                for (let i = 0; i < currentCourse.chapters.length; i++) {
+                    if (!progress[courseId][i]) { currentChapterIndex = i; break; }
+                }
+            }
+            
+            document.getElementById('courseSelectView').classList.add('hidden');
+            document.getElementById('readerView').classList.remove('hidden');
+            document.getElementById('headerTitle').textContent = currentCourse.title;
+            
+            renderChapterList();
+            renderChapter();
+        }
+        
+        function backToCourses() {
+            stopTTS();
+            currentCourse = null;
+            document.getElementById('readerView').classList.add('hidden');
+            document.getElementById('courseSelectView').classList.remove('hidden');
+            document.getElementById('headerTitle').textContent = 'Course Reader';
+            renderCourseSelect();
+        }
+        
+        function renderChapterList() {
+            const list = document.getElementById('chapterList');
+            const courseId = currentCourse.courseId;
+            
+            list.innerHTML = currentCourse.chapters.map((ch, i) => {
+                const isComplete = progress[courseId]?.[i];
+                const isActive = i === currentChapterIndex;
+                return `
+                    <li class="chapter-item ${isActive ? 'active' : ''} ${isComplete ? 'completed' : ''}" 
+                        onclick="goToChapter(${i})">
+                        ${ch.title}
+                    </li>
+                `;
+            }).join('');
+        }
+        
+        function renderChapter() {
+            const chapter = currentCourse.chapters[currentChapterIndex];
+            const courseId = currentCourse.courseId;
+            
+            document.getElementById('chapterTitle').textContent = chapter.title;
+            document.getElementById('chapterProgress').textContent = 
+                `Chapter ${currentChapterIndex + 1} of ${currentCourse.totalChapters}`;
+            
+            const words = chapter.content.split(/\s+/).length;
+            document.getElementById('wordCount').textContent = `${words.toLocaleString()} words`;
+            document.getElementById('readTime').textContent = `${Math.ceil(words / 200)} min read`;
+            
+            const content = chapter.content
+                .split('\n\n')
+                .filter(p => p.trim())
+                .map(p => `<p>${p.trim().replace(/\n/g, '<br>')}</p>`)
+                .join('');
+            
+            document.getElementById('chapterContent').innerHTML = content;
+            document.getElementById('markComplete').checked = !!progress[courseId]?.[currentChapterIndex];
+            
+            document.getElementById('prevBtn').disabled = currentChapterIndex === 0;
+            document.getElementById('nextBtn').textContent = 
+                currentChapterIndex === currentCourse.totalChapters - 1 ? 'Finish Course' : 'Next →';
+            
+            renderChapterList();
+            window.scrollTo(0, 0);
+        }
+        
+        function goToChapter(index) {
+            stopTTS();
+            currentChapterIndex = index;
+            renderChapter();
+            document.getElementById('sidebar').classList.remove('open');
+        }
+        
+        function prevChapter() {
+            if (currentChapterIndex > 0) goToChapter(currentChapterIndex - 1);
+        }
+        
+        function nextChapter() {
+            if (currentChapterIndex < currentCourse.totalChapters - 1) {
+                goToChapter(currentChapterIndex + 1);
+            } else {
+                alert('🎉 Congratulations! You\'ve completed this course!');
+                backToCourses();
+            }
+        }
+        
+        async function toggleComplete() {
+            const courseId = currentCourse.courseId;
+            const completed = document.getElementById('markComplete').checked;
+            await saveChapterProgress(courseId, currentChapterIndex, completed);
+            renderChapterList();
+        }
+        
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+        
+        // Init
+        init();
+        
+        document.getElementById('backBtn').addEventListener('click', (e) => {
+            if (currentCourse) { e.preventDefault(); backToCourses(); }
+        });
+    </script>
+</body>
+</html>

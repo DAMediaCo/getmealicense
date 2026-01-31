@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>GetMeALicense Client Setup Guide</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">GetMeALicense Client Setup Guide</h1>
+</header>
+<h1 id="getmealicense---client-setup-guide">GetMeALicense - Client Setup
+Guide</h1>
+<p>Welcome! This guide will walk you through setting up your
+GetMeALicense training platform. The process takes about 15-20
+minutes.</p>
+<hr />
+<h2 id="what-youll-need">What You’ll Need</h2>
+<ul>
+<li>Your GoDaddy account login (for your domain)</li>
+<li>An email address for your Vercel account</li>
+<li>A credit card for Vercel Pro ($20/month)</li>
+</ul>
+<hr />
+<h2 id="step-1-create-your-vercel-account">Step 1: Create Your Vercel
+Account</h2>
+<p>Vercel hosts your training website. It’s fast, reliable, and easy to
+use.</p>
+<ol type="1">
+<li>Go to <strong><a
+href="https://vercel.com">vercel.com</a></strong></li>
+<li>Click <strong>“Sign Up”</strong> (top right)</li>
+<li>Choose <strong>“Continue with Email”</strong></li>
+<li>Enter your email address and create a password</li>
+<li>Verify your email (check inbox for confirmation link)</li>
+<li>Once logged in, you’re ready for the next step</li>
+</ol>
+<hr />
+<h2 id="step-2-accept-our-project-invitation">Step 2: Accept Our Project
+Invitation</h2>
+<p>We’ll send you an email invitation to join the GetMeALicense
+project.</p>
+<ol type="1">
+<li>Check your email for an invitation from Vercel</li>
+<li>Click <strong>“Accept Invitation”</strong></li>
+<li>The project will appear in your Vercel dashboard</li>
+<li>Click on the project → you’ll see it’s already deployed!</li>
+</ol>
+<p>Your temporary URL will be something like:
+<code>getmealicense-yourcompany.vercel.app</code></p>
+<hr />
+<h2 id="step-3-upgrade-to-vercel-pro">Step 3: Upgrade to Vercel Pro</h2>
+<p>The Pro plan ($20/month) is required for custom domains and better
+performance.</p>
+<ol type="1">
+<li>In Vercel, click your profile icon (top right)</li>
+<li>Click <strong>“Settings”</strong></li>
+<li>Select <strong>“Billing”</strong> from the left menu</li>
+<li>Click <strong>“Upgrade to Pro”</strong></li>
+<li>Enter your payment information</li>
+<li>Done! Your account is now Pro</li>
+</ol>
+<hr />
+<h2 id="step-4-connect-your-domain-godaddy">Step 4: Connect Your Domain
+(GoDaddy)</h2>
+<p>Now we’ll point your domain (e.g., <code>yourcompany.com</code>) to
+your new site.</p>
+<h3 id="part-a-add-domain-in-vercel">Part A: Add Domain in Vercel</h3>
+<ol type="1">
+<li>Go to your project in Vercel</li>
+<li>Click <strong>“Settings”</strong> (top menu)</li>
+<li>Click <strong>“Domains”</strong> (left menu)</li>
+<li>Type your domain name (e.g., <code>training.yourcompany.com</code>
+or <code>yourcompany.com</code>)</li>
+<li>Click <strong>“Add”</strong></li>
+<li>Vercel will show you DNS records to configure — <strong>keep this
+page open!</strong></li>
+</ol>
+<h3 id="part-b-update-dns-in-godaddy">Part B: Update DNS in GoDaddy</h3>
+<ol type="1">
+<li>Go to <strong><a href="https://godaddy.com">godaddy.com</a></strong>
+and log in</li>
+<li>Click <strong>“My Products”</strong> (top menu, under your
+name)</li>
+<li>Find your domain and click <strong>“DNS”</strong> (or “Manage
+DNS”)</li>
+<li>You’ll see a list of DNS records</li>
+</ol>
+<p><strong>If using your main domain (yourcompany.com):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Name</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>@</td>
+<td><code>76.76.21.21</code></td>
+</tr>
+<tr>
+<td>CNAME</td>
+<td>www</td>
+<td><code>cname.vercel-dns.com</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>If using a subdomain (training.yourcompany.com):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Name</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CNAME</td>
+<td>training</td>
+<td><code>cname.vercel-dns.com</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="how-to-edit-in-godaddy">How to Edit in GoDaddy:</h3>
+<ol type="1">
+<li>Find the existing A record for <code>@</code> → Click the pencil
+icon → Change the value to <code>76.76.21.21</code> → Save</li>
+<li>Find or add a CNAME record for <code>www</code> → Set value to
+<code>cname.vercel-dns.com</code> → Save</li>
+</ol>
+<h3 id="part-c-verify-in-vercel">Part C: Verify in Vercel</h3>
+<ol type="1">
+<li>Go back to Vercel (Domains settings)</li>
+<li>Wait 5-30 minutes for DNS to propagate</li>
+<li>Vercel will automatically detect the changes</li>
+<li>You’ll see a green checkmark when it’s working!</li>
+</ol>
+<hr />
+<h2 id="step-5-test-your-site">Step 5: Test Your Site</h2>
+<ol type="1">
+<li>Open a new browser tab</li>
+<li>Go to your domain (e.g., <code>https://yourcompany.com</code>)</li>
+<li>You should see the GetMeALicense login page</li>
+<li>Try logging in with the manager account we created for you</li>
+</ol>
+<hr />
+<h2 id="youre-done">You’re Done! 🎉</h2>
+<p>Your training platform is now live at your custom domain.</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>“DNS not configured correctly” in Vercel:</strong> - DNS
+changes can take up to 48 hours (usually 5-30 minutes) - Double-check
+the values in GoDaddy match exactly - Make sure there are no extra
+spaces</p>
+<p><strong>“This site can’t be reached”:</strong> - Wait a few more
+minutes for DNS propagation - Try clearing your browser cache
+(Ctrl+Shift+R) - Try a different browser or incognito mode</p>
+<p><strong>Can’t find DNS settings in GoDaddy:</strong> - Log in → My
+Products → Find domain → Click “DNS” button - Or search “DNS” in
+GoDaddy’s help search</p>
+<hr />
+<h2 id="need-help">Need Help?</h2>
+<p>Contact us and we’ll walk you through it: - Email: [YOUR SUPPORT
+EMAIL] - Phone: [YOUR SUPPORT PHONE]</p>
+<p>We’re happy to do a quick screen share if you get stuck!</p>
+<hr />
+<p><em>GetMeALicense - Professional Exam Prep Training</em></p>
+</body>
+</html>

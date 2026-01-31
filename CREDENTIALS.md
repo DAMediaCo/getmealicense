@@ -24,10 +24,11 @@
 - **Dashboard:** https://resend.com/emails
 
 ### Vercel (Hosting)
+- **Login Email:** getmealicense@proton.me
+- **Login Password:** Gml$Vercel2026!Secure
 - **Project:** getmealicense
 - **URL:** https://getmealicense.vercel.app
 - **Repo:** https://github.com/DAMediaCo/getmealicense
-- *(Uses your existing Vercel account)*
 
 ### GitHub
 - **Repo:** https://github.com/DAMediaCo/getmealicense
