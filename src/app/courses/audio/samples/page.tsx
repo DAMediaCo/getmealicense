@@ -2,13 +2,16 @@
 
 import { useState, useRef } from 'react';
 
+// Audio CDN - R2 bucket for production, local for dev
+const AUDIO_CDN = process.env.NEXT_PUBLIC_AUDIO_CDN || '';
+
 const VOICES = [
-  { id: 'aria', name: 'Aria', gender: 'female', description: 'Warm & engaging', file: '/courses/audio/samples/aria_female.mp3' },
-  { id: 'jenny', name: 'Jenny', gender: 'female', description: 'Clear & professional', file: '/courses/audio/samples/jenny_female.mp3' },
-  { id: 'michelle', name: 'Michelle', gender: 'female', description: 'Friendly & expressive', file: '/courses/audio/samples/michelle_female.mp3' },
-  { id: 'christopher', name: 'Christopher', gender: 'male', description: 'Confident & clear', file: '/courses/audio/samples/christopher_male.mp3' },
-  { id: 'eric', name: 'Eric', gender: 'male', description: 'Deep & authoritative', file: '/courses/audio/samples/eric_male.mp3' },
-  { id: 'guy', name: 'Guy', gender: 'male', description: 'Calm & conversational', file: '/courses/audio/samples/guy_male.mp3' },
+  { id: 'aria', name: 'Aria', gender: 'female', description: 'Warm & engaging', file: `${AUDIO_CDN}/courses/audio/samples/aria_female.mp3` },
+  { id: 'jenny', name: 'Jenny', gender: 'female', description: 'Clear & professional', file: `${AUDIO_CDN}/courses/audio/samples/jenny_female.mp3` },
+  { id: 'michelle', name: 'Michelle', gender: 'female', description: 'Friendly & expressive', file: `${AUDIO_CDN}/courses/audio/samples/michelle_female.mp3` },
+  { id: 'christopher', name: 'Christopher', gender: 'male', description: 'Confident & clear', file: `${AUDIO_CDN}/courses/audio/samples/christopher_male.mp3` },
+  { id: 'eric', name: 'Eric', gender: 'male', description: 'Deep & authoritative', file: `${AUDIO_CDN}/courses/audio/samples/eric_male.mp3` },
+  { id: 'guy', name: 'Guy', gender: 'male', description: 'Calm & conversational', file: `${AUDIO_CDN}/courses/audio/samples/guy_male.mp3` },
 ];
 
 export default function VoiceSamplesPage() {

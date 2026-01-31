@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+// Audio CDN - R2 bucket for production, local for dev
+const AUDIO_CDN = process.env.NEXT_PUBLIC_AUDIO_CDN || '';
+
 // Types
 interface Page {
   title: string;
@@ -230,9 +233,10 @@ export default function CourseReader() {
     const chapter = currentCourse.pages[currentChapterIndex];
     // Try multi-voice format first
     const voiceAudio = audioManifest.audio?.[selectedVoice]?.[currentCourse.courseId]?.[chapter.id];
-    if (voiceAudio) return voiceAudio;
+    if (voiceAudio) return AUDIO_CDN + voiceAudio;
     // Fall back to legacy format
-    return audioManifest[currentCourse.courseId]?.[chapter.id];
+    const legacyPath = audioManifest[currentCourse.courseId]?.[chapter.id];
+    return legacyPath ? AUDIO_CDN + legacyPath : null;
   };
 
   const changeVoice = (voiceId: string) => {
