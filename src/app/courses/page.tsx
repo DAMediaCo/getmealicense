@@ -18,6 +18,12 @@ interface Course {
   chapters: Chapter[];
 }
 
+interface AudioManifest {
+  [courseId: string]: {
+    [chapterId: string]: string;
+  };
+}
+
 // Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -29,14 +35,17 @@ export default function CourseReader() {
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [progress, setProgress] = useState<Record<string, Record<number, boolean>>>({});
   const [user, setUser] = useState<any>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [audioManifest, setAudioManifest] = useState<AudioManifest>({});
+  const [useHDAudio, setUseHDAudio] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
 
-  // Load courses and auth state
+  // Load courses, audio manifest, and auth state
   useEffect(() => {
     // Load courses
     Promise.all([
@@ -48,6 +57,12 @@ export default function CourseReader() {
         review_notes_lh: reviewNotes
       });
     });
+
+    // Load audio manifest
+    fetch('/audio/manifest.json')
+      .then(r => r.json())
+      .then(setAudioManifest)
+      .catch(() => console.log('No audio manifest found'));
 
     // Load progress from localStorage
     const saved = localStorage.getItem('gmal_progress');
@@ -61,21 +76,51 @@ export default function CourseReader() {
       }
     });
 
-    // Setup TTS
+    // Setup fallback TTS
     if (typeof window !== 'undefined') {
       synthRef.current = window.speechSynthesis;
-      const loadVoices = () => {
-        const v = synthRef.current?.getVoices().filter(v => v.lang.startsWith('en')) || [];
-        setVoices(v);
-      };
-      loadVoices();
-      synthRef.current?.addEventListener('voiceschanged', loadVoices);
     }
 
     return () => {
+      audioRef.current?.pause();
       synthRef.current?.cancel();
     };
   }, []);
+
+  // Setup audio element when course/chapter changes
+  useEffect(() => {
+    if (!currentCourse) return;
+    
+    const chapter = currentCourse.chapters[currentChapterIndex];
+    const audioPath = audioManifest[currentCourse.courseId]?.[chapter.id];
+    
+    if (audioPath && useHDAudio) {
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+        audioRef.current.onended = () => setIsPlaying(false);
+        audioRef.current.ontimeupdate = () => {
+          if (audioRef.current) {
+            setAudioProgress(audioRef.current.currentTime);
+          }
+        };
+        audioRef.current.onloadedmetadata = () => {
+          if (audioRef.current) {
+            setAudioDuration(audioRef.current.duration);
+          }
+        };
+      }
+      audioRef.current.src = audioPath;
+      audioRef.current.playbackRate = speed;
+      audioRef.current.load();
+    }
+  }, [currentCourse, currentChapterIndex, audioManifest, useHDAudio]);
+
+  // Update playback speed
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
+  }, [speed]);
 
   const loadProgressFromSupabase = async (userId: string) => {
     const { data } = await supabase
@@ -132,36 +177,75 @@ export default function CourseReader() {
   };
 
   const goToChapter = (index: number) => {
-    synthRef.current?.cancel();
-    setIsSpeaking(false);
+    stopAudio();
     setCurrentChapterIndex(index);
     setSidebarOpen(false);
+    setAudioProgress(0);
+    setAudioDuration(0);
     window.scrollTo(0, 0);
   };
 
-  const toggleTTS = () => {
+  const getAudioPath = () => {
+    if (!currentCourse) return null;
+    const chapter = currentCourse.chapters[currentChapterIndex];
+    return audioManifest[currentCourse.courseId]?.[chapter.id];
+  };
+
+  const toggleAudio = () => {
+    const audioPath = getAudioPath();
+    
+    // Use HD Audio (MP3) if available
+    if (audioPath && useHDAudio && audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
+      return;
+    }
+    
+    // Fallback to browser TTS
     if (!synthRef.current || !currentCourse) return;
     
-    if (isSpeaking) {
+    if (isPlaying) {
       synthRef.current.pause();
-      setIsSpeaking(false);
+      setIsPlaying(false);
     } else if (synthRef.current.paused) {
       synthRef.current.resume();
-      setIsSpeaking(true);
+      setIsPlaying(true);
     } else {
       const chapter = currentCourse.chapters[currentChapterIndex];
       const utterance = new SpeechSynthesisUtterance(chapter.content);
       utterance.rate = speed;
-      if (voices[selectedVoice]) utterance.voice = voices[selectedVoice];
-      utterance.onend = () => setIsSpeaking(false);
+      utterance.onend = () => setIsPlaying(false);
       synthRef.current.speak(utterance);
-      setIsSpeaking(true);
+      setIsPlaying(true);
     }
   };
 
-  const stopTTS = () => {
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     synthRef.current?.cancel();
-    setIsSpeaking(false);
+    setIsPlaying(false);
+    setAudioProgress(0);
+  };
+
+  const seekAudio = (time: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setAudioProgress(time);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Course selection view
@@ -203,13 +287,14 @@ export default function CourseReader() {
   const chapter = currentCourse.chapters[currentChapterIndex];
   const wordCount = chapter.content.split(/\s+/).length;
   const isComplete = progress[currentCourse.courseId]?.[currentChapterIndex];
+  const hasHDAudio = !!getAudioPath();
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <button onClick={() => { stopTTS(); setCurrentCourse(null); }} className="text-blue-600 hover:underline">
+          <button onClick={() => { stopAudio(); setCurrentCourse(null); }} className="text-blue-600 hover:underline">
             ← Back to Courses
           </button>
           <h1 className="font-semibold text-sm md:text-base truncate mx-4">{currentCourse.title}</h1>
@@ -252,43 +337,80 @@ export default function CourseReader() {
             </div>
           </div>
 
-          {/* TTS Controls */}
-          <div className="bg-slate-50 rounded-lg p-3 mb-6 flex flex-wrap items-center gap-3">
-            <button
-              onClick={toggleTTS}
-              className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${isSpeaking ? 'bg-red-500' : 'bg-blue-600'}`}
-            >
-              {isSpeaking ? '⏸ Pause' : '▶ Listen'}
-            </button>
-            <button onClick={stopTTS} className="px-4 py-2 rounded-lg bg-slate-500 text-white text-sm">
-              ⏹ Stop
-            </button>
-            <div className="flex items-center gap-2 text-sm">
-              <label>Speed:</label>
-              <select value={speed} onChange={e => setSpeed(parseFloat(e.target.value))} className="border rounded px-2 py-1">
-                <option value={0.75}>0.75x</option>
-                <option value={1}>1x</option>
-                <option value={1.25}>1.25x</option>
-                <option value={1.5}>1.5x</option>
-                <option value={2}>2x</option>
-              </select>
-            </div>
-            {voices.length > 0 && (
-              <div className="flex items-center gap-2 text-sm">
-                <label>Voice:</label>
-                <select value={selectedVoice} onChange={e => setSelectedVoice(parseInt(e.target.value))} className="border rounded px-2 py-1 max-w-[150px]">
-                  {voices.map((v, i) => (
-                    <option key={i} value={i}>{v.name.split(' ').slice(0, 3).join(' ')}</option>
-                  ))}
+          {/* Audio Player */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 mb-6">
+            <div className="flex items-center gap-3 mb-3">
+              <button
+                onClick={toggleAudio}
+                className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-lg transition-all ${
+                  isPlaying ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {isPlaying ? '⏸' : '▶'}
+              </button>
+              <button onClick={stopAudio} className="w-10 h-10 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center">
+                ⏹
+              </button>
+              
+              <div className="flex-1">
+                {hasHDAudio && useHDAudio ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">{formatTime(audioProgress)}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={audioDuration || 100}
+                      value={audioProgress}
+                      onChange={(e) => seekAudio(parseFloat(e.target.value))}
+                      className="flex-1 h-2 bg-slate-200 rounded-full appearance-none cursor-pointer"
+                    />
+                    <span className="text-xs text-slate-500">{formatTime(audioDuration)}</span>
+                  </div>
+                ) : (
+                  <span className="text-sm text-slate-500">Using browser voice</span>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <select 
+                  value={speed} 
+                  onChange={e => setSpeed(parseFloat(e.target.value))} 
+                  className="border rounded px-2 py-1 text-sm bg-white"
+                >
+                  <option value={0.75}>0.75x</option>
+                  <option value={1}>1x</option>
+                  <option value={1.25}>1.25x</option>
+                  <option value={1.5}>1.5x</option>
+                  <option value={2}>2x</option>
                 </select>
               </div>
-            )}
+            </div>
+            
+            {/* Audio mode indicator */}
+            <div className="flex items-center justify-between text-xs">
+              {hasHDAudio ? (
+                <span className="text-green-600 font-medium">🎧 HD Audio Available</span>
+              ) : (
+                <span className="text-amber-600">⚠️ HD Audio generating...</span>
+              )}
+              {hasHDAudio && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useHDAudio}
+                    onChange={e => setUseHDAudio(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-slate-600">Use HD Audio</span>
+                </label>
+              )}
+            </div>
           </div>
 
           {/* Content */}
           <div className="prose prose-slate max-w-none">
             {chapter.content.split('\n\n').filter(p => p.trim()).map((p, i) => (
-              <p key={i} className="mb-4 leading-relaxed">{p.trim()}</p>
+              <p key={i} className="mb-4 leading-relaxed whitespace-pre-wrap">{p.trim()}</p>
             ))}
           </div>
 
