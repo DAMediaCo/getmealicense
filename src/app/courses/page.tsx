@@ -17,11 +17,37 @@ interface Course {
   pages: Page[];
 }
 
+// New multi-voice manifest structure
 interface AudioManifest {
-  [courseId: string]: {
-    [chapterId: string]: string;
+  voices?: VoiceInfo[];
+  defaultVoice?: string;
+  audio: {
+    [voiceId: string]: {
+      [courseId: string]: {
+        [chapterId: string]: string;
+      };
+    };
   };
+  // Legacy fallback
+  [courseId: string]: any;
 }
+
+interface VoiceInfo {
+  id: string;
+  name: string;
+  gender: 'female' | 'male';
+  description: string;
+}
+
+// Available voices
+const VOICES: VoiceInfo[] = [
+  { id: 'aria', name: 'Aria', gender: 'female', description: 'Warm & engaging' },
+  { id: 'jenny', name: 'Jenny', gender: 'female', description: 'Clear & professional' },
+  { id: 'michelle', name: 'Michelle', gender: 'female', description: 'Friendly & expressive' },
+  { id: 'christopher', name: 'Christopher', gender: 'male', description: 'Confident & clear' },
+  { id: 'eric', name: 'Eric', gender: 'male', description: 'Deep & authoritative' },
+  { id: 'guy', name: 'Guy', gender: 'male', description: 'Calm & conversational' },
+];
 
 // Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -39,8 +65,10 @@ export default function CourseReader() {
   const [audioDuration, setAudioDuration] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [audioManifest, setAudioManifest] = useState<AudioManifest>({});
+  const [audioManifest, setAudioManifest] = useState<AudioManifest>({ audio: {} });
   const [useHDAudio, setUseHDAudio] = useState(true);
+  const [selectedVoice, setSelectedVoice] = useState('aria');
+  const [voiceSelectorOpen, setVoiceSelectorOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
 
@@ -60,12 +88,26 @@ export default function CourseReader() {
     // Load audio manifest
     fetch('/courses/audio/manifest.json')
       .then(r => r.json())
-      .then(setAudioManifest)
+      .then((data) => {
+        // Handle both new multi-voice and legacy formats
+        if (data.audio) {
+          setAudioManifest(data);
+        } else {
+          // Legacy format - wrap in default voice
+          setAudioManifest({ audio: { aria: data }, defaultVoice: 'aria' });
+        }
+      })
       .catch(() => console.log('No audio manifest found'));
 
     // Load progress from localStorage
     const saved = localStorage.getItem('gmal_progress');
     if (saved) setProgress(JSON.parse(saved));
+
+    // Load voice preference
+    const savedVoice = localStorage.getItem('gmal_voice');
+    if (savedVoice && VOICES.some(v => v.id === savedVoice)) {
+      setSelectedVoice(savedVoice);
+    }
 
     // Check auth
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -86,12 +128,11 @@ export default function CourseReader() {
     };
   }, []);
 
-  // Setup audio element when course/chapter changes
+  // Setup audio element when course/chapter/voice changes
   useEffect(() => {
     if (!currentCourse) return;
     
-    const chapter = currentCourse.pages[currentChapterIndex];
-    const audioPath = audioManifest[currentCourse.courseId]?.[chapter.id];
+    const audioPath = getAudioPath();
     
     if (audioPath && useHDAudio) {
       if (!audioRef.current) {
@@ -112,7 +153,7 @@ export default function CourseReader() {
       audioRef.current.playbackRate = speed;
       audioRef.current.load();
     }
-  }, [currentCourse, currentChapterIndex, audioManifest, useHDAudio]);
+  }, [currentCourse, currentChapterIndex, audioManifest, useHDAudio, selectedVoice]);
 
   // Update playback speed
   useEffect(() => {
@@ -187,8 +228,24 @@ export default function CourseReader() {
   const getAudioPath = () => {
     if (!currentCourse) return null;
     const chapter = currentCourse.pages[currentChapterIndex];
+    // Try multi-voice format first
+    const voiceAudio = audioManifest.audio?.[selectedVoice]?.[currentCourse.courseId]?.[chapter.id];
+    if (voiceAudio) return voiceAudio;
+    // Fall back to legacy format
     return audioManifest[currentCourse.courseId]?.[chapter.id];
   };
+
+  const changeVoice = (voiceId: string) => {
+    setSelectedVoice(voiceId);
+    localStorage.setItem('gmal_voice', voiceId);
+    setVoiceSelectorOpen(false);
+    // Reset audio if playing
+    if (isPlaying) {
+      stopAudio();
+    }
+  };
+
+  const getVoiceInfo = () => VOICES.find(v => v.id === selectedVoice) || VOICES[0];
 
   const toggleAudio = () => {
     const audioPath = getAudioPath();
@@ -338,6 +395,63 @@ export default function CourseReader() {
 
           {/* Audio Player */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 mb-6">
+            {/* Voice Selector */}
+            <div className="mb-4 pb-3 border-b border-blue-200/50">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Narrator Voice</span>
+                <div className="relative">
+                  <button
+                    onClick={() => setVoiceSelectorOpen(!voiceSelectorOpen)}
+                    className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg hover:border-blue-400 transition-all shadow-sm"
+                  >
+                    <span className="text-lg">{getVoiceInfo().gender === 'female' ? '👩' : '👨'}</span>
+                    <div className="text-left">
+                      <div className="font-medium text-sm">{getVoiceInfo().name}</div>
+                      <div className="text-xs text-slate-500">{getVoiceInfo().description}</div>
+                    </div>
+                    <span className="text-slate-400 ml-1">▼</span>
+                  </button>
+                  
+                  {voiceSelectorOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                      <div className="p-2 bg-slate-50 border-b border-slate-100">
+                        <span className="text-xs font-medium text-slate-500">Select a voice</span>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {VOICES.map(voice => (
+                          <button
+                            key={voice.id}
+                            onClick={() => changeVoice(voice.id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 transition-colors ${
+                              selectedVoice === voice.id ? 'bg-blue-50 border-l-2 border-blue-500' : ''
+                            }`}
+                          >
+                            <span className="text-xl">{voice.gender === 'female' ? '👩' : '👨'}</span>
+                            <div className="text-left flex-1">
+                              <div className="font-medium text-sm">{voice.name}</div>
+                              <div className="text-xs text-slate-500">{voice.description}</div>
+                            </div>
+                            {selectedVoice === voice.id && (
+                              <span className="text-blue-500 font-bold">✓</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="p-2 bg-slate-50 border-t border-slate-100">
+                        <a 
+                          href="/courses/audio/samples" 
+                          className="text-xs text-blue-600 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          🎧 Preview all voices
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex items-center gap-3 mb-3">
               <button
                 onClick={toggleAudio}
@@ -385,12 +499,12 @@ export default function CourseReader() {
               </div>
             </div>
             
-            {/* Audio mode indicator */}
+            {/* Audio status */}
             <div className="flex items-center justify-between text-xs">
               {hasHDAudio ? (
-                <span className="text-green-600 font-medium">🎧 HD Audio Available</span>
+                <span className="text-green-600 font-medium">🎧 HD Audio Ready</span>
               ) : (
-                <span className="text-amber-600">⚠️ HD Audio generating...</span>
+                <span className="text-amber-600">⚠️ Audio coming soon for this voice</span>
               )}
               {hasHDAudio && (
                 <label className="flex items-center gap-2 cursor-pointer">

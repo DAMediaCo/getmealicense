@@ -45,9 +45,9 @@ async def process_course(course_file: str):
         
         # Clean text for TTS
         text = page['content']
-        # Remove symbols that don't speak well
-        text = text.replace('•', '. ')
-        text = text.replace('◦', '. ')
+        # Silent pauses for bullets - just remove them (natural sentence flow)
+        text = text.replace('• ', '')
+        text = text.replace('◦ ', '')
         text = text.replace('→', 'to')
         text = text.replace('✓', 'check')
         text = text.replace('—', ', ')
