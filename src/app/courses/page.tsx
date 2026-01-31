@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // Types
-interface Chapter {
+interface Page {
   title: string;
   id: string;
   content: string;
@@ -14,8 +14,7 @@ interface Course {
   courseId: string;
   title: string;
   description: string;
-  totalChapters: number;
-  chapters: Chapter[];
+  pages: Page[];
 }
 
 interface AudioManifest {
@@ -59,7 +58,7 @@ export default function CourseReader() {
     });
 
     // Load audio manifest
-    fetch('/audio/manifest.json')
+    fetch('/courses/audio/manifest.json')
       .then(r => r.json())
       .then(setAudioManifest)
       .catch(() => console.log('No audio manifest found'));
@@ -91,7 +90,7 @@ export default function CourseReader() {
   useEffect(() => {
     if (!currentCourse) return;
     
-    const chapter = currentCourse.chapters[currentChapterIndex];
+    const chapter = currentCourse.pages[currentChapterIndex];
     const audioPath = audioManifest[currentCourse.courseId]?.[chapter.id];
     
     if (audioPath && useHDAudio) {
@@ -159,7 +158,7 @@ export default function CourseReader() {
   const getCourseProgress = (courseId: string) => {
     if (!progress[courseId] || !courses[courseId]) return 0;
     const completed = Object.values(progress[courseId]).filter(v => v).length;
-    return Math.round((completed / courses[courseId].totalChapters) * 100);
+    return Math.round((completed / courses[courseId].pages.length) * 100);
   };
 
   const openCourse = (courseId: string) => {
@@ -169,7 +168,7 @@ export default function CourseReader() {
     // Find first incomplete chapter
     let startIndex = 0;
     if (progress[courseId]) {
-      for (let i = 0; i < course.chapters.length; i++) {
+      for (let i = 0; i < course.pages.length; i++) {
         if (!progress[courseId][i]) { startIndex = i; break; }
       }
     }
@@ -187,7 +186,7 @@ export default function CourseReader() {
 
   const getAudioPath = () => {
     if (!currentCourse) return null;
-    const chapter = currentCourse.chapters[currentChapterIndex];
+    const chapter = currentCourse.pages[currentChapterIndex];
     return audioManifest[currentCourse.courseId]?.[chapter.id];
   };
 
@@ -216,7 +215,7 @@ export default function CourseReader() {
       synthRef.current.resume();
       setIsPlaying(true);
     } else {
-      const chapter = currentCourse.chapters[currentChapterIndex];
+      const chapter = currentCourse.pages[currentChapterIndex];
       const utterance = new SpeechSynthesisUtterance(chapter.content);
       utterance.rate = speed;
       utterance.onend = () => setIsPlaying(false);
@@ -268,7 +267,7 @@ export default function CourseReader() {
                   <h2 className="text-lg font-semibold mb-2">{course.title}</h2>
                   <p className="text-slate-500 text-sm mb-4">{course.description}</p>
                   <div className="flex gap-4 text-sm text-slate-500 mb-3">
-                    <span>📖 {course.totalChapters} chapters</span>
+                    <span>📖 {course.pages.length} chapters</span>
                     <span>✓ {prog}% complete</span>
                   </div>
                   <div className="h-1 bg-slate-200 rounded-full overflow-hidden">
@@ -284,7 +283,7 @@ export default function CourseReader() {
   }
 
   // Reader view
-  const chapter = currentCourse.chapters[currentChapterIndex];
+  const chapter = currentCourse.pages[currentChapterIndex];
   const wordCount = chapter.content.split(/\s+/).length;
   const isComplete = progress[currentCourse.courseId]?.[currentChapterIndex];
   const hasHDAudio = !!getAudioPath();
@@ -309,7 +308,7 @@ export default function CourseReader() {
         <aside className={`${sidebarOpen ? 'block' : 'hidden'} md:block bg-white border border-slate-200 rounded-xl p-4 h-fit md:sticky md:top-20 max-h-[calc(100vh-100px)] overflow-y-auto`}>
           <h3 className="text-xs uppercase text-slate-500 mb-3 font-medium">Chapters</h3>
           <ul className="space-y-1">
-            {currentCourse.chapters.map((ch, i) => (
+            {currentCourse.pages.map((ch, i) => (
               <li
                 key={ch.id}
                 onClick={() => goToChapter(i)}
@@ -329,7 +328,7 @@ export default function CourseReader() {
           <div className="mb-6 pb-4 border-b border-slate-200">
             <h2 className="text-xl md:text-2xl font-bold mb-2">{chapter.title}</h2>
             <div className="flex gap-3 text-sm text-slate-500">
-              <span>Chapter {currentChapterIndex + 1} of {currentCourse.totalChapters}</span>
+              <span>Chapter {currentChapterIndex + 1} of {currentCourse.pages.length}</span>
               <span>•</span>
               <span>{wordCount.toLocaleString()} words</span>
               <span>•</span>
@@ -437,7 +436,7 @@ export default function CourseReader() {
             </button>
             <button
               onClick={() => {
-                if (currentChapterIndex < currentCourse.totalChapters - 1) {
+                if (currentChapterIndex < currentCourse.pages.length - 1) {
                   goToChapter(currentChapterIndex + 1);
                 } else {
                   alert('🎉 Congratulations! You\'ve completed this course!');
@@ -446,7 +445,7 @@ export default function CourseReader() {
               }}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg"
             >
-              {currentChapterIndex === currentCourse.totalChapters - 1 ? 'Finish Course' : 'Next →'}
+              {currentChapterIndex === currentCourse.pages.length - 1 ? 'Finish Course' : 'Next →'}
             </button>
           </div>
         </main>
